@@ -1,0 +1,5 @@
+region           = "europe-west3"
+name             = "adorsys-gis"
+root_domain_name = "learn.adorsys.team"
+environment      = "prod"
+machine_type     = "c4a-highcpu-2"
