@@ -1,6 +1,6 @@
 region           = "europe-west3"
-name             = "gis"
-root_domain_name = "test.gis.apps.ssegning.com"
+name             = "gis-obs"
+root_domain_name = "test.gis-apps.ssegning.com"
 environment      = "dev"
 machine_type     = "e2-medium"
 

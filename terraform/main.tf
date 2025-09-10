@@ -87,17 +87,6 @@ module "storage" {
   depends_on = [module.project]
 }
 
-module "redis" {
-  source = "./modules/redis/"
-
-  project_id         = local.project_id
-  name               = local.name
-  region             = var.region
-  authorized_network = module.vpc.network_id
-
-  depends_on = [module.project]
-}
-
 module "helm-apps" {
   source = "./modules/helm/"
 

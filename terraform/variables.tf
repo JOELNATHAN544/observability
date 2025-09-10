@@ -97,7 +97,6 @@ variable "api_enabled_services" {
     "file.googleapis.com",
     "certificatemanager.googleapis.com",
     "domains.googleapis.com",
-    "redis.googleapis.com",
   ]
 }
 
