@@ -60,6 +60,13 @@ module "dns" {
         module.ip["manager"].address,
       ]
     }
+    "siem-cert" = {
+      type = "A"
+      ttl  = 300
+      records = [
+        module.ip["cert"].address,
+      ]
+    }
   }
 
   depends_on = [module.project, module.project_services]
@@ -133,11 +140,8 @@ module "monitoring" {
 module "wazuh" {
   source = "./modules/wazuh/"
 
-  helm_chart_user    = var.wazuh_helm_chart_user
-  helm_chart_pass    = var.wazuh_helm_chart_pass
   helm_chart_version = var.wazuh_helm_chart_version
-
-  subject = var.subject
+  subject            = var.subject
 
   ip_addresses = {
     for k, v in local.wazuh_domains :

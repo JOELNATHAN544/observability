@@ -5,11 +5,11 @@ environment      = "prod"
 
 project_id = "observe-472521"
 
-wazuh_helm_chart_version = "0.6.0-rc.18"
+wazuh_helm_chart_version = "0.6.1-rc.1"
 
 subject = {
   country = "CM"
-  locality = "Douala"
-  organization = "BVMAC"
+  locality = "Bangangte"
+  organization = "adorsys GIS"
   common_name = "root-ca"
 }

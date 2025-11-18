@@ -89,18 +89,7 @@ variable "api_enabled_services" {
   ]
 }
 
-variable "wazuh_helm_chart_user" {
-  sensitive = true
-  type      = string
-}
-
-variable "wazuh_helm_chart_pass" {
-  sensitive = true
-  type      = string
-}
-
 variable "wazuh_helm_chart_version" {
-  sensitive = true
   type      = string
 }
 

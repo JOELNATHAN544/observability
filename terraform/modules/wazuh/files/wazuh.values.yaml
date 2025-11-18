@@ -9,16 +9,27 @@ indexer:
     size: 100Gi
   keycloak:
     enabled: false
+    openid_connect_url: "${openid_connect_url}/.well-known/openid-configuration"
 
 master:
   replicaCount: 1
   persistence:
     size: 50Gi
+  resources:
+    limits:
+      ephemeral-storage: 10Gi
+    requests:
+      ephemeral-storage: 10Gi
 
 worker:
   replicaCount: 2
   persistence:
     size: 50Gi
+  resources:
+    limits:
+      ephemeral-storage: 10Gi
+    requests:
+      ephemeral-storage: 10Gi
 
 integration:
   jira:
@@ -50,6 +61,18 @@ dashboard:
       networking.gke.io/managed-certificates: "${dashboard_certificate_name}"
       kubernetes.io/ingress.global-static-ip-name: "${dashboard_name}"
       #kubernetes.io/ingress.allow-http: "false"
+  branding:
+    logo:
+      defaultUrl: "https://wazuh-assets-bucket.s3.eu-central-1.amazonaws.com/images/favicon-dark.svg"
+    mark:
+      defaultUrl: "https://wazuh-assets-bucket.s3.eu-central-1.amazonaws.com/images/favicon-dark.svg"
+    #   darkModeUrl: ""
+    loadingLogo:
+      defaultUrl: "https://wazuh-assets-bucket.s3.eu-central-1.amazonaws.com/images/favicon-dark.svg"
+    #   darkModeUrl: ""
+    faviconUrl: "https://wazuh-assets-bucket.s3.eu-central-1.amazonaws.com/images/favicon-dark.svg"
+    applicationTitle: "SIEM"
+    useExpandedHeader: false
 
 svcs:
   '{{ include "common.names.fullname" $ }}-ext':

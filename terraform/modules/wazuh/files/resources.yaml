@@ -19,6 +19,16 @@ resources:
     spec:
       domains:
         - ${manager_domain}
+  - apiVersion: networking.gke.io/v1
+    kind: ManagedCertificate
+    metadata:
+      name: ${cert_certificate_name}
+      namespace: ${ns}
+      labels:
+        app: wazuh
+    spec:
+      domains:
+        - ${cert_domain}
           
   - apiVersion: cloud.google.com/v1
     kind: BackendConfig
@@ -30,6 +40,21 @@ resources:
         type: HTTPS
         port: 5601
         requestPath: /app/login
+        timeoutSec: 5
+        checkIntervalSec: 30
+        healthyThreshold: 2
+        unhealthyThreshold: 3
+          
+  - apiVersion: cloud.google.com/v1
+    kind: BackendConfig
+    metadata:
+      name: cert-backend-config
+      namespace: ${ns}
+    spec:
+      healthCheck:
+        type: HTTP
+        port: 8000
+        requestPath: /health
         timeoutSec: 5
         checkIntervalSec: 30
         healthyThreshold: 2

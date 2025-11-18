@@ -1,16 +1,10 @@
-variable "helm_chart_user" {
-  sensitive = true
-  type      = string
-}
-
-variable "helm_chart_pass" {
-  sensitive = true
-  type      = string
-}
-
 variable "helm_chart_version" {
-  sensitive = true
   type      = string
+}
+
+variable "openid_connect_url" {
+  type = string
+  default = "https://login.dev.wazuh.adorsys.team/realms/test-adorsys"
 }
 
 variable "subject" {
@@ -25,6 +19,11 @@ variable "subject" {
 variable "ip_addresses" {
   type = object({
     dashboard = object({
+      domain  = string
+      ip_name = string
+      ip      = string
+    })
+    cert = object({
       domain  = string
       ip_name = string
       ip      = string

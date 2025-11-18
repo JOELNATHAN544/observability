@@ -5,8 +5,9 @@ locals {
     owner       = local.name,
     environment = var.environment
   }
-  
+
   wazuh_domains = {
+    cert      = { domain = "siem-cert.${var.root_domain_name}", regional = false },
     dashboard = { domain = "siem.${var.root_domain_name}", regional = false },
     manager   = { domain = "siem-events.${var.root_domain_name}", regional = true }
   }

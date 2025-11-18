@@ -1,24 +1,3 @@
-resource "helm_release" "other_resources" {
-  name             = "monitoring-secrets"
-  namespace        = kubernetes_namespace.wazuh_namespace.metadata[0].name
-  create_namespace = false
-
-  repository = "https://bedag.github.io/helm-charts"
-  chart      = "raw"
-  version    = "2.0.0"
-
-  values = [templatefile("${path.module}/files/resources.yaml", {
-    ns                         = kubernetes_namespace.wazuh_namespace.metadata[0].name
-    dashboard_certificate_name = local.dashboard_certificate_name
-    dashboard_domain           = var.ip_addresses.dashboard.domain
-    manager_certificate_name   = local.manager_certificate_name
-    manager_domain             = var.ip_addresses.manager.domain
-  })]
-
-  cleanup_on_fail = false
-  wait            = false
-}
-
 resource "helm_release" "wazuh" {
   count = 1
 
@@ -26,19 +5,17 @@ resource "helm_release" "wazuh" {
   namespace        = kubernetes_namespace.wazuh_namespace.metadata[0].name
   create_namespace = false
 
-  repository = "https://chartmuseum.wazuh.adorsys.team"
+  repository = "https://adorsys-gis.github.io/wazuh-helm"
   chart      = "wazuh-helm"
   version    = var.helm_chart_version
-
-  repository_username = var.helm_chart_user
-  repository_password = var.helm_chart_pass
-
+  
   values = [
     file("${path.module}/files/.wazuh-helm/charts/wazuh/values-high-ressources.yaml"),
     file("${path.module}/files/.wazuh-helm/charts/wazuh/values-gke.yaml"),
     file("${path.module}/files/.wazuh-helm/charts/wazuh/values-gke-pv.yaml"),
     file("${path.module}/files/.wazuh-helm/charts/wazuh/values-gke-svc.yaml"),
     file("${path.module}/files/.wazuh-helm/charts/wazuh/values-gke-autopilot.yaml"),
+    file("${path.module}/files/.wazuh-helm/charts/wazuh/values-permission-fix.yaml"),
     templatefile("${path.module}/files/wazuh.values.yaml", {
       dashboard_domain           = var.ip_addresses.dashboard.domain
       dashboard_certificate_name = local.dashboard_certificate_name
@@ -49,6 +26,8 @@ resource "helm_release" "wazuh" {
       manager_certificate_name = local.manager_certificate_name
       manager_name             = var.ip_addresses.manager.ip_name
       manager_ip               = var.ip_addresses.manager.ip
+
+      openid_connect_url = var.openid_connect_url
     })
   ]
 
