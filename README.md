@@ -1,3 +1,4 @@
+```mermaid
 graph TB
     subgraph "Project Root"
         A["📁 observability"]
@@ -134,3 +135,4 @@ graph TB
     style F fill:#fce4ec
     style G fill:#e8f5e9
     style H fill:#c8e6c9
+```
