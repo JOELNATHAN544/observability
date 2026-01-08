@@ -53,9 +53,6 @@ observability/
 │       │   └── USE: Export Cert-Manager service account and configuration details
 │       ├── variables.tf
 │       │   └── USE: Define customizable parameters for Cert-Manager
-│       └── workload-identity.tf
-│           └── USE: Configure GCP Workload Identity for Cert-Manager to access DNS
-│
 │
 ├── docs/
 │   ├── ARCHITECTURE.md
@@ -64,8 +61,6 @@ observability/
 │   │   └── USE: Step-by-step quick start guide for new users
 │   ├── README.md
 │   │   └── USE: Documentation index and navigation hub
-│   ├── TROUBLESHOOTING.md
-│   │   └── USE: Common issues, debug commands, and solutions
 │   ├── TUTORIAL_ARGOCD.md
 │   │   └── USE: Manual ArgoCD installation guide (alternative to Terraform)
 │   ├── TUTORIAL_CERT_MANAGER.md
