@@ -4,10 +4,10 @@ The **LGTM** stack is a comprehensive open-source observability platform powered
 
 ## Components
 
-- **L**oki: Like Prometheus, but for logs. It is a horizontally-scalable, highly-available, multi-tenant log aggregation system.
-- **G**rafana: The open observability platform for visualization and analytics.
-- **T**empo: A high-volume, minimal dependency distributed tracing backend.
-- **M**imir: Scalable long-term storage for Prometheus metrics.
+- **Loki**: Like Prometheus, but for logs. It is a horizontally-scalable, highly-available, multi-tenant log aggregation system.
+- **Grafana**: The open observability platform for visualization and analytics.
+- **Tempo**: A high-volume, minimal dependency distributed tracing backend.
+- **Mimir**: Scalable long-term storage for Prometheus metrics.
 
 ## Deployment Guides
 
@@ -18,3 +18,9 @@ For a fully automated deployment using this stack, please follow the [Kubernetes
 
 ### 2. Manual Deployment
 If you prefer to configure and deploy components manually, or need to understand the individual steps, please refer to the [Manual LGTM Deployment Guide](../docs/manual-lgtm-deployment.md).
+
+## Testing & Verification
+To verify that your deployment is working correctly, please refer to the [Testing Monitoring Stack Deployment Guide](../docs/testing-monitoring-stack-deployment.md).
+
+## Configuration
+For detailed configuration of the Alloy collector, please refer to the [Alloy Configuration Guide](../docs/alloy-config.md).

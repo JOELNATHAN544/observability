@@ -1,6 +1,6 @@
-# manual LGTM Stack Deployment
+# Manual LGTM Stack Deployment
 
-This guide explains how to manually deploy the observability stack (Loki, Grafana, Tempo, Mimir) using the Docker Compose configuration found in `lgtm-stack/manual`.
+This guide explains how to manually deploy the observability stack (Loki, Grafana, Tempo, Mimir) using the Docker Compose configuration found in the `lgtm-stack/manual` directory.
 
 ## 1. Deployment Constraints
 
