@@ -1,8 +1,11 @@
+# Workload Cluster Resources (Agent Deployment)
+
 resource "kubernetes_namespace" "argocd_workload" {
   provider = kubernetes.workload_cluster_1
 
   metadata {
     name = var.argocd_namespace
+
     labels = merge(
       var.labels_common,
       {
@@ -19,6 +22,7 @@ resource "kubernetes_secret" "argocd_agent_client_tls" {
   metadata {
     name      = "argocd-agent-client-tls"
     namespace = kubernetes_namespace.argocd_workload.metadata[0].name
+
     labels = merge(
       var.labels_common,
       { "component" = "agent" }
@@ -41,12 +45,12 @@ resource "kubernetes_secret" "argocd_agent_client_tls" {
 
 resource "kubernetes_secret" "argocd_ca_cert_workload" {
   provider = kubernetes.workload_cluster_1
-
-  count = var.create_certificate_authority ? 1 : 0
+  count    = var.create_certificate_authority ? 1 : 0
 
   metadata {
     name      = "argocd-ca-cert"
     namespace = kubernetes_namespace.argocd_workload.metadata[0].name
+
     labels = merge(
       var.labels_common,
       { "component" = "ca" }
@@ -69,51 +73,97 @@ resource "helm_release" "argocd_workload" {
   name             = "argocd"
   repository       = var.helm_repository_url
   chart            = "argo-cd"
-  namespace        = kubernetes_namespace.argocd_workload.metadata[0].name
+  namespace        = var.argocd_namespace
   create_namespace = false
   version          = var.argocd_version
 
+  timeout         = 900
+  wait            = true
+  wait_for_jobs   = true
+  cleanup_on_fail = false
+
   values = [
-    jsonencode({
+    yamlencode({
       global = {
         domain = "argocd-workload"
       }
 
+      configs = {
+        params = {
+          "server.insecure" = "true"
+        }
+        cm = {
+          "server.disable.auth" = "true"
+          "timeout.reconciliation" = "180s"
+        }
+      }
+
       server = {
         replicas = 1
+        
         service = {
           type = "ClusterIP"
         }
-        tls = {
-          enabled = false
-        }
+
         metrics = {
           enabled = true
           serviceMonitor = {
             enabled = false
+          }
+        }
+
+        resources = {
+          requests = {
+            cpu    = "100m"
+            memory = "128Mi"
+          }
+          limits = {
+            cpu    = "500m"
+            memory = "512Mi"
           }
         }
       }
 
       repoServer = {
         replicas = 1
-        tls = {
-          enabled = false
-        }
+
         metrics = {
           enabled = true
           serviceMonitor = {
             enabled = false
           }
         }
+
+        resources = {
+          requests = {
+            cpu    = "100m"
+            memory = "128Mi"
+          }
+          limits = {
+            cpu    = "500m"
+            memory = "512Mi"
+          }
+        }
       }
 
       controller = {
         replicas = 1
+
         metrics = {
           enabled = true
           serviceMonitor = {
             enabled = false
+          }
+        }
+
+        resources = {
+          requests = {
+            cpu    = "250m"
+            memory = "256Mi"
+          }
+          limits = {
+            cpu    = "1000m"
+            memory = "1Gi"
           }
         }
       }
@@ -124,32 +174,20 @@ resource "helm_release" "argocd_workload" {
 
       redis = {
         enabled = true
-      }
-
-      configs = {
-        cm = {
-          "server.disable.auth" = "true"
+        resources = {
+          requests = {
+            cpu    = "100m"
+            memory = "128Mi"
+          }
+          limits = {
+            cpu    = "200m"
+            memory = "256Mi"
+          }
         }
       }
 
       rbac = {
         create = true
-      }
-
-      resources = {
-        requests = {
-          cpu    = "100m"
-          memory = "128Mi"
-        }
-        limits = {
-          cpu    = "500m"
-          memory = "512Mi"
-        }
-      }
-
-      persistence = {
-        enabled = true
-        size    = "10Gi"
       }
     })
   ]
@@ -163,6 +201,7 @@ resource "kubernetes_config_map" "argocd_agent_config" {
   metadata {
     name      = "argocd-agent-config"
     namespace = kubernetes_namespace.argocd_workload.metadata[0].name
+
     labels = merge(
       var.labels_common,
       { "component" = "agent-config" }
@@ -171,15 +210,15 @@ resource "kubernetes_config_map" "argocd_agent_config" {
   }
 
   data = {
-    "server.address"       = var.workload_clusters[0].principal_address
-    "server.port"          = tostring(var.workload_clusters[0].principal_port)
-    "server.tls.enabled"   = tostring(var.workload_clusters[0].tls_enabled)
-    "agent.name"           = var.workload_clusters[0].agent_name
-    "agent.mode"           = var.agent_mode
-    "agent.tls.enabled"    = tostring(var.workload_clusters[0].tls_enabled)
-    "agent.tls.cert.path"  = "/etc/agent/tls/tls.crt"
-    "agent.tls.key.path"   = "/etc/agent/tls/tls.key"
-    "agent.tls.ca.path"    = "/etc/agent/ca/ca.crt"
+    "server.address"      = var.workload_clusters[0].principal_address
+    "server.port"         = tostring(var.workload_clusters[0].principal_port)
+    "server.tls.enabled"  = tostring(var.workload_clusters[0].tls_enabled)
+    "agent.name"          = var.workload_clusters[0].agent_name
+    "agent.mode"          = var.agent_mode
+    "agent.tls.enabled"   = tostring(var.workload_clusters[0].tls_enabled)
+    "agent.tls.cert.path" = "/etc/agent/tls/tls.crt"
+    "agent.tls.key.path"  = "/etc/agent/tls/tls.key"
+    "agent.tls.ca.path"   = "/etc/agent/ca/ca.crt"
   }
 
   depends_on = [kubernetes_namespace.argocd_workload]
@@ -191,6 +230,7 @@ resource "kubernetes_service_account" "argocd_agent" {
   metadata {
     name      = "argocd-agent"
     namespace = kubernetes_namespace.argocd_workload.metadata[0].name
+
     labels = merge(
       var.labels_common,
       { "component" = "agent" }
@@ -201,11 +241,13 @@ resource "kubernetes_service_account" "argocd_agent" {
   depends_on = [kubernetes_namespace.argocd_workload]
 }
 
+# FIXED: Proper ClusterRole with valid permissions
 resource "kubernetes_cluster_role" "argocd_agent" {
   provider = kubernetes.workload_cluster_1
 
   metadata {
     name = "argocd-agent"
+
     labels = merge(
       var.labels_common,
       { "component" = "agent" }
@@ -213,15 +255,123 @@ resource "kubernetes_cluster_role" "argocd_agent" {
     annotations = var.annotations_common
   }
 
+  # Core API resources
   rule {
-    api_groups = ["*"]
-    resources  = ["*"]
-    verbs      = ["*"]
+    api_groups = [""]
+    resources = [
+      "pods",
+      "services",
+      "configmaps",
+      "secrets",
+      "namespaces",
+      "events",
+      "serviceaccounts",
+      "endpoints",
+      "persistentvolumeclaims"
+    ]
+    verbs = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
 
+  # Apps resources
   rule {
-    non_resource_urls = ["*"]
-    verbs             = ["*"]
+    api_groups = ["apps"]
+    resources = [
+      "deployments",
+      "replicasets",
+      "statefulsets",
+      "daemonsets"
+    ]
+    verbs = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+
+  # Batch resources
+  rule {
+    api_groups = ["batch"]
+    resources = [
+      "jobs",
+      "cronjobs"
+    ]
+    verbs = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+
+  # RBAC resources
+  rule {
+    api_groups = ["rbac.authorization.k8s.io"]
+    resources = [
+      "roles",
+      "rolebindings",
+      "clusterroles",
+      "clusterrolebindings"
+    ]
+    verbs = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+
+  # Networking resources
+  rule {
+    api_groups = ["networking.k8s.io"]
+    resources = [
+      "ingresses",
+      "networkpolicies",
+      "ingressclasses"
+    ]
+    verbs = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+
+  # Storage resources
+  rule {
+    api_groups = ["storage.k8s.io"]
+    resources = [
+      "storageclasses"
+    ]
+    verbs = ["get", "list", "watch"]
+  }
+
+  # ArgoCD custom resources
+  rule {
+    api_groups = ["argoproj.io"]
+    resources = [
+      "applications",
+      "applicationsets",
+      "appprojects"
+    ]
+    verbs = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+
+  # Metrics
+  rule {
+    api_groups = ["metrics.k8s.io"]
+    resources = [
+      "pods",
+      "nodes"
+    ]
+    verbs = ["get", "list"]
+  }
+
+  # API Extensions
+  rule {
+    api_groups = ["apiextensions.k8s.io"]
+    resources = [
+      "customresourcedefinitions"
+    ]
+    verbs = ["get", "list", "watch"]
+  }
+
+  # Auto-scaling
+  rule {
+    api_groups = ["autoscaling"]
+    resources = [
+      "horizontalpodautoscalers"
+    ]
+    verbs = ["get", "list", "watch", "create", "update", "patch", "delete"]
+  }
+
+  # Policy
+  rule {
+    api_groups = ["policy"]
+    resources = [
+      "poddisruptionbudgets"
+    ]
+    verbs = ["get", "list", "watch", "create", "update", "patch", "delete"]
   }
 }
 
@@ -230,6 +380,7 @@ resource "kubernetes_cluster_role_binding" "argocd_agent" {
 
   metadata {
     name = "argocd-agent"
+
     labels = merge(
       var.labels_common,
       { "component" = "agent" }
@@ -258,6 +409,7 @@ resource "kubernetes_deployment" "argocd_agent" {
   metadata {
     name      = "argocd-agent"
     namespace = kubernetes_namespace.argocd_workload.metadata[0].name
+
     labels = merge(
       var.labels_common,
       { "component" = "agent" }
@@ -291,8 +443,8 @@ resource "kubernetes_deployment" "argocd_agent" {
         service_account_name = kubernetes_service_account.argocd_agent.metadata[0].name
 
         container {
-          name  = "agent"
-          image = "ghcr.io/argoproj-labs/argocd-agent:latest"
+          name              = "agent"
+          image             = "ghcr.io/argoproj-labs/argocd-agent:v2.13.3"
           image_pull_policy = "IfNotPresent"
 
           port {
@@ -431,7 +583,7 @@ resource "kubernetes_deployment" "argocd_agent" {
         }
 
         security_context {
-          fsGroup = 1000
+          fs_group = 1000
         }
       }
     }
@@ -441,6 +593,7 @@ resource "kubernetes_deployment" "argocd_agent" {
     kubernetes_namespace.argocd_workload,
     kubernetes_secret.argocd_agent_client_tls,
     kubernetes_config_map.argocd_agent_config,
-    kubernetes_service_account.argocd_agent
+    kubernetes_service_account.argocd_agent,
+    kubernetes_cluster_role_binding.argocd_agent
   ]
 }

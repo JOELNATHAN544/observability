@@ -28,7 +28,7 @@ variable "control_plane_cluster" {
   })
   default = {
     name            = "control-plane"
-    context_name    = "control-plane"
+    context_name    = "cluster-2"
     kubeconfig_path = "~/.kube/config"
     server_address  = "argocd-control-plane.local"
     server_port     = 443
@@ -49,7 +49,7 @@ variable "workload_clusters" {
   }))
   default = [{
     name              = "workload-1"
-    context_name      = "workload-1"
+    context_name      = "workload"
     kubeconfig_path   = "~/.kube/config"
     principal_address = "argocd-control-plane.local"
     principal_port    = 443

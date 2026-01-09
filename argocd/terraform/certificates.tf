@@ -7,10 +7,11 @@ resource "local_file" "certs_directory" {
   content  = ""
 }
 
+# Certificate Authority
 resource "tls_private_key" "ca" {
-  count             = var.create_certificate_authority ? 1 : 0
-  algorithm         = "RSA"
-  rsa_bits          = 4096
+  count     = var.create_certificate_authority ? 1 : 0
+  algorithm = "RSA"
+  rsa_bits  = 4096
 }
 
 resource "tls_self_signed_cert" "ca" {
@@ -43,6 +44,7 @@ resource "local_file" "ca_key" {
   content  = tls_private_key.ca[0].private_key_pem
 }
 
+# Server Certificate (for ArgoCD Server)
 resource "tls_private_key" "server" {
   algorithm = "RSA"
   rsa_bits  = 4096
@@ -65,10 +67,11 @@ resource "tls_cert_request" "server" {
   ]
 }
 
+# FIXED: Removed duplicate ternary operators
 resource "tls_locally_signed_cert" "server" {
   cert_request_pem      = tls_cert_request.server.cert_request_pem
-  ca_cert_pem           = var.create_certificate_authority ? tls_self_signed_cert.ca[0].cert_pem : tls_self_signed_cert.ca[0].cert_pem
-  ca_private_key_pem    = var.create_certificate_authority ? tls_private_key.ca[0].private_key_pem : tls_private_key.ca[0].private_key_pem
+  ca_cert_pem           = tls_self_signed_cert.ca[0].cert_pem
+  ca_private_key_pem    = tls_private_key.ca[0].private_key_pem
   validity_period_hours = var.tls_config.cert_validity_days * 24
 
   allowed_uses = [
@@ -89,6 +92,7 @@ resource "local_file" "server_key" {
   content  = tls_private_key.server.private_key_pem
 }
 
+# Agent Client Certificate (for Agent to Server mTLS)
 resource "tls_private_key" "agent_client" {
   algorithm = "RSA"
   rsa_bits  = 4096
@@ -107,10 +111,11 @@ resource "tls_cert_request" "agent_client" {
   ]
 }
 
+# FIXED: Removed duplicate ternary operators
 resource "tls_locally_signed_cert" "agent_client" {
   cert_request_pem      = tls_cert_request.agent_client.cert_request_pem
-  ca_cert_pem           = var.create_certificate_authority ? tls_self_signed_cert.ca[0].cert_pem : tls_self_signed_cert.ca[0].cert_pem
-  ca_private_key_pem    = var.create_certificate_authority ? tls_private_key.ca[0].private_key_pem : tls_private_key.ca[0].private_key_pem
+  ca_cert_pem           = tls_self_signed_cert.ca[0].cert_pem
+  ca_private_key_pem    = tls_private_key.ca[0].private_key_pem
   validity_period_hours = var.tls_config.cert_validity_days * 24
 
   allowed_uses = [
