@@ -4,6 +4,12 @@ variable "install_cert_manager" {
   default     = false
 }
 
+variable "release_name" {
+  description = "Helm release name"
+  type        = string
+  default     = "cert-manager"
+}
+
 variable "cert_manager_version" {
   description = "Version of cert-manager chart"
   type        = string

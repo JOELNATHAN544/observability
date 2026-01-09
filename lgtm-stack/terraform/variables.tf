@@ -88,10 +88,34 @@ variable "cert_manager_version" {
   default     = "v1.15.0"
 }
 
+variable "cert_manager_release_name" {
+  description = "Helm release name for Cert-Manager"
+  type        = string
+  default     = "cert-manager"
+}
+
+variable "cert_manager_namespace" {
+  description = "Namespace where Cert-Manager is installed"
+  type        = string
+  default     = "cert-manager"
+}
+
 variable "nginx_ingress_version" {
   description = "Version of ingress-nginx chart"
   type        = string
   default     = "4.10.1"
+}
+
+variable "nginx_ingress_release_name" {
+  description = "Helm release name for NGINX Ingress"
+  type        = string
+  default     = "nginx-monitoring"
+}
+
+variable "nginx_ingress_namespace" {
+  description = "Namespace where NGINX Ingress is installed"
+  type        = string
+  default     = "ingress-nginx"
 }
 
 variable "loki_version" {

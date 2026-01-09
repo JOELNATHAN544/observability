@@ -63,18 +63,52 @@ Before deploying the stack, ensure the following requirements are met:
 
 ## Configuration
 
-The deployment is configured via Terraform variables. Create a `terraform.tfvars` file in `lgtm-stack/terraform` to define your environment-specific values.
+The deployment is configured via Terraform variables. Copy the template to creating your configuration file:
+
+```bash
+cp terraform.tfvars.template terraform.tfvars
+```
+
+Edit `terraform.tfvars` to define your environment-specific values.
 
 | Variable | Description | Required | Default |
 | :--- | :--- | :---: | :--- |
 | `project_id` | Google Cloud Project ID. | Yes | - |
 | `cluster_name` | Name of the target GKE cluster. | Yes | - |
 | `region` | GCP Region for resources (e.g., `europe-west3`). | No | `us-central1` |
+| `cluster_location` | Location of the GKE cluster. | Yes | - |
+| `environment` | Environment label (e.g., `prod`). | No | `production` |
+| `namespace` | K8s Namespace for stack. | No | `observability` |
 | `monitoring_domain` | Base domain for endpoints (e.g., `obs.example.com`). | Yes | - |
-| `ingress_class_name` | Ingress Class Name (e.g., `nginx`, `traefik`). | No | `nginx` |
-| `cert_issuer_name` | Name of the Cert-Manager Issuer (e.g., `letsencrypt-prod`). | No | `letsencrypt-prod` |
-| `cert_issuer_kind` | Kind of Issuer (`ClusterIssuer` or `Issuer`). | No | `ClusterIssuer` |
+| `letsencrypt_email` | Email for ACME registration. | Yes | - |
 | `grafana_admin_password` | Initial admin password for Grafana. | Yes | - |
+| `k8s_service_account_name` | K8s Service Account Name. | No | `observability-sa` |
+| `gcp_service_account_name` | GCP Service Account Name. | No | `gke-observability-sa` |
+| `ingress_class_name` | Ingress Class Name (e.g., `nginx`). | No | `nginx` |
+| `cert_issuer_name` | Name of the Cert-Manager Issuer. | No | `letsencrypt-prod` |
+| `cert_issuer_kind` | Kind of Issuer (`ClusterIssuer`). | No | `ClusterIssuer` |
+
+### Modular Component Variables
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `install_cert_manager` | Install Cert-Manager via Helm. | `false` |
+| `cert_manager_version` | Cert-Manager chart version. | `v1.15.0` |
+| `cert_manager_release_name` | Cert-Manager release name. | `cert-manager` |
+| `cert_manager_namespace` | Namespace for Cert-Manager. | `cert-manager` |
+| `install_nginx_ingress` | Install NGINX Ingress via Helm. | `false` |
+| `nginx_ingress_version` | Ingress Controller chart version. | `4.10.1` |
+| `nginx_ingress_release_name` | Ingress Controller release name. | `nginx-monitoring` |
+| `nginx_ingress_namespace` | Namespace for Ingress Controller. | `ingress-nginx` |
+
+### Version Overrides
+| Variable | Description | Default |
+| :--- | :--- | :--- |
+| `loki_version` | Loki Helm chart version. | `6.6.4` |
+| `mimir_version` | Mimir Helm chart version. | `5.5.0` |
+| `tempo_version` | Tempo Helm chart version. | `1.57.0` |
+| `prometheus_version` | Prometheus Helm chart version. | `25.27.0` |
+| `grafana_version` | Grafana Helm chart version. | `10.3.0` |
+| `loki_schema_from_date` | Date for Loki schema start (YYYY-MM-DD). | `2024-01-01` |
 
 ### Modular Components
 The stack automatically provisions **Cert-Manager** and **NGINX Ingress Controller** by default using the internal modules. You can control this via:
@@ -199,7 +233,7 @@ Access the Grafana dashboard using the domain configured in `monitoring_domain`.
 
 To upgrade components, update the version variables in `terraform.tfvars` or `variables.tf` and re-run `terraform apply`.
 
-**Note**: The current stack uses **Loki v6.20.0**. Major version upgrades should be tested in a staging environment first to ensure compatibility with the storage schema.
+> **Note**: The current stack uses **Loki v6.20.0**. Major version upgrades should be tested in a staging environment first to ensure compatibility with the storage schema.
 
 ### Uninstallation
 
@@ -209,4 +243,4 @@ To remove all resources created by this module:
 terraform destroy
 ```
 
-**Warning**: Google Cloud Storage buckets containing observability data have `force_destroy` set to `false` to prevent accidental data loss. If you intend to delete the data, you must empty the buckets manually before running destroy.
+> **Warning**: Google Cloud Storage buckets containing observability data have `force_destroy` set to `false` to prevent accidental data loss. If you intend to delete the data, you must empty the buckets manually before running destroy.

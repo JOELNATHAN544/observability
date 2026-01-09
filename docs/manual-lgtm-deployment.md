@@ -6,7 +6,7 @@ This guide explains how to manually deploy an observability stack.
 
 This deployment expects an external Docker network named `netbird_netbird` to exist. This is typically created by the NetBird management stack.
 
-If you do not have NetBird running, you must create this network manually to avoid errors:
+> **Note**: If you do not have NetBird running, you must create this network manually to avoid errors:
 
 ```bash
 docker network create netbird_netbird

@@ -1,7 +1,7 @@
 resource "helm_release" "cert_manager" {
   count = var.install_cert_manager ? 1 : 0
 
-  name             = "cert-manager"
+  name             = var.release_name
   repository       = "https://charts.jetstack.io"
   chart            = "cert-manager"
   namespace        = var.namespace

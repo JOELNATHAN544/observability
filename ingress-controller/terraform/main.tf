@@ -1,7 +1,7 @@
 resource "helm_release" "nginx_ingress" {
   count = var.install_nginx_ingress ? 1 : 0
 
-  name             = "nginx-monitoring"
+  name             = var.release_name
   repository       = "https://kubernetes.github.io/ingress-nginx"
   chart            = "ingress-nginx"
   namespace        = var.namespace

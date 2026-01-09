@@ -10,6 +10,12 @@ variable "nginx_ingress_version" {
   default     = "4.10.1"
 }
 
+variable "release_name" {
+  description = "Helm release name"
+  type        = string
+  default     = "nginx-monitoring"
+}
+
 variable "ingress_class_name" {
   description = "Ingress Class Name"
   type        = string

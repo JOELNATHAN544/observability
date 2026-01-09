@@ -34,16 +34,17 @@ cd observability
    terraform init
    ```
 
-4. **Create a `terraform.tfvars` file**:
-   Create a file named `terraform.tfvars` with your specific configuration:
+4. **Configure `terraform.tfvars`**:
+   Copy the provided template:
+   ```bash
+   cp terraform.tfvars.template terraform.tfvars
+   ```
+   Open `terraform.tfvars` and update the values to match your requirements (or existing installation).
+
    ```hcl
-   letsencrypt_email = "your-email@example.com"
-   cert_issuer_name  = "letsencrypt-prod"
-   install_cert_manager = true  # Must be set to true explicitly
-   
-   # Optional:
-   # cert_issuer_kind = "ClusterIssuer" # or "Issuer"
-   # namespace = "cert-manager"
+   install_cert_manager = true
+   letsencrypt_email    = "admin@example.com"
+   # release_name       = "cert-manager"
    ```
 
 5. **Review the Plan**:
@@ -61,6 +62,7 @@ cd observability
 | Name | Description | Default |
 |------|-------------|---------|
 | `install_cert_manager` | Install Cert-Manager via Helm | `false` |
+| `release_name` | Helm Release Name | `cert-manager` |
 | `cert_manager_version` | Chart version | `v1.15.0` |
 | `namespace` | Namespace to install into | `cert-manager` |
 | `letsencrypt_email` | Email for ACME registration | **Required** |

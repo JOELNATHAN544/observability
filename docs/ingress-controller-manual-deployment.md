@@ -28,7 +28,7 @@ kubectl config current-context
    helm install nginx-monitoring ingress-nginx/ingress-nginx \
      --namespace ingress-nginx \ # You can change this to your preferred namespace
      --create-namespace \
-     --version 4.10.1 \
+     --version 4.14.1 \
      --set controller.ingressClassResource.name=nginx \
      --set controller.ingressClass=nginx \
      --set controller.ingressClassResource.controllerValue=k8s.io/nginx \

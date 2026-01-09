@@ -159,7 +159,8 @@ module "cert_manager" {
 
   install_cert_manager = var.install_cert_manager
   cert_manager_version = var.cert_manager_version
-  namespace            = "cert-manager"
+  release_name         = var.cert_manager_release_name
+  namespace            = var.cert_manager_namespace
 
   letsencrypt_email = var.letsencrypt_email
   cert_issuer_name  = var.cert_issuer_name
@@ -178,7 +179,8 @@ module "ingress_nginx" {
 
   install_nginx_ingress = var.install_nginx_ingress
   nginx_ingress_version = var.nginx_ingress_version
-  namespace             = "ingress-nginx"
+  release_name          = var.nginx_ingress_release_name
+  namespace             = var.nginx_ingress_namespace
   ingress_class_name    = var.ingress_class_name
 }
 

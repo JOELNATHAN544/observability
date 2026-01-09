@@ -28,7 +28,7 @@ kubectl config current-context
    helm install cert-manager jetstack/cert-manager \
      --namespace cert-manager \ # You can change this to your preferred namespace
      --create-namespace \
-     --version v1.15.0 \
+     --version v1.16.2 \
      --set installCRDs=true
    ```
 
