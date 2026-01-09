@@ -1,6 +1,11 @@
-# Cert-Manager Component
+# Cert-Manager Deployment
 
-This directory contains the necessary configurations for **Cert-Manager**, which handles certificate management and issuance for the observability stack.
+This directory contains infrastructure-as-code and configuration for deploying **Cert-Manager** to automate the management and issuance of TLS certificates for the Kubernetes cluster.
+
+Cert-Manager provides:
+*   **Automated Issuance**: Obtaining certificates from Let's Encrypt and other issuers.
+*   **Renewal**: Automatically renewing certificates before expiry.
+*   **Integration**: Working seamlessly with Ingress resources to secure external access for any application.
 
 ## Deployment Options
 

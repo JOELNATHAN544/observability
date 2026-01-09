@@ -1,6 +1,11 @@
-# NGINX Ingress Controller Component
+# NGINX Ingress Deployment
 
-This directory contains the configurations for the **NGINX Ingress Controller**, which manages external access to the observability stack services.
+This directory contains infrastructure-as-code and configuration for deploying the **NGINX Ingress Controller** to manage external access for services running on the cluster.
+
+The Ingress Controller provides:
+*   **Load Balancing**: Routing external traffic to internal Kubernetes services.
+*   **SSL Termination**: Handling HTTPS connections (integrated with Cert-Manager).
+*   **Path-based Routing**: Directing traffic to applications based on hostnames or paths.
 
 ## Deployment Options
 
