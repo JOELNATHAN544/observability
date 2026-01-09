@@ -135,3 +135,9 @@ variable "cert_issuer_name" {
   type        = string
   default     = "letsencrypt-prod"
 }
+
+variable "cert_issuer_kind" {
+  description = "Kind of Issuer to create (ClusterIssuer or Issuer)"
+  type        = string
+  default     = "ClusterIssuer"
+}

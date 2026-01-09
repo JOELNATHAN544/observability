@@ -17,7 +17,11 @@ Infrastructure provisioning and application deployment are fully automated using
 
 ## Architecture
 
-The system uses a centralized ingress controller to route traffic to specific services. Workload Identity is configured to securely authenticate Kubernetes Service Accounts with Google Cloud APIs, eliminating the need for static service account keys.
+The system is composed of modular components:
+
+1.  **Core Stack (LGTM)**: The main observability components.
+2.  **Cert-Manager**: Manages TLS certificates (Modular, can be deployed standalone).
+3.  **Ingress Controller**: Manages external access (Modular, can be deployed standalone).
 
 ```mermaid
 graph TD
@@ -69,24 +73,39 @@ The deployment is configured via Terraform variables. Create a `terraform.tfvars
 | `monitoring_domain` | Base domain for endpoints (e.g., `obs.example.com`). | Yes | - |
 | `ingress_class_name` | Ingress Class Name (e.g., `nginx`, `traefik`). | No | `nginx` |
 | `cert_issuer_name` | Name of the Cert-Manager Issuer (e.g., `letsencrypt-prod`). | No | `letsencrypt-prod` |
+| `cert_issuer_kind` | Kind of Issuer (`ClusterIssuer` or `Issuer`). | No | `ClusterIssuer` |
 | `grafana_admin_password` | Initial admin password for Grafana. | Yes | - |
 
-### Ingress Compatibility
+### Modular Components
+The stack automatically provisions **Cert-Manager** and **NGINX Ingress Controller** by default using the internal modules. You can control this via:
 
-This module is agnostic to the Ingress Controller and Certificate Issuer. By default, it assumes `nginx` and `letsencrypt-prod`. To use a different configuration (e.g., Traefik or a custom ClusterIssuer), update the `ingress_class_name` and `cert_issuer_name` variables in `terraform.tfvars`.
+- `install_cert_manager` (default: `false` - Must be enabled if Cert-Manager is not already present)
+- `install_nginx_ingress` (default: `false` - Must be enabled if Ingress Controller is not already present)
+
+> **Important**: Set these to `true` in your `terraform.tfvars` if you are doing a fresh install of the entire stack and need these components.
+
+If you prefer to deploy them standalone or manually, refer to their respective documentation:
+- [Cert-Manager Documentation](../cert-manager/README.md)
+- [Ingress Controller Documentation](../ingress-controller/README.md)
 
 ## Installation
 
-1. **Initialize Terraform**
+1. **Verify Context**
+   Make sure you are context-switched to the correct cluster.
+   ```bash
+   kubectl config current-context
+   ```
+
+2. **Initialize Terraform**
 
     Navigate to the Terraform directory and initialize the project to download required providers and modules.
 
     ```bash
-    cd ../lgtm-stack/terraform
+    cd lgtm-stack/terraform
     terraform init
     ```
 
-2. **Plan Deployment**
+3. **Plan Deployment**
 
     Generate an execution plan to verify the resources that will be created.
 
@@ -94,7 +113,7 @@ This module is agnostic to the Ingress Controller and Certificate Issuer. By def
     terraform plan
     ```
 
-3. **Apply Configuration**
+4. **Apply Configuration**
 
     Execute the plan to provision infrastructure and deploy the application stack.
 
@@ -112,7 +131,7 @@ Verify that all pods are running successfully in the `<NAMESPACE>` (default: `ob
 kubectl get pods -n <NAMESPACE>
 ```
 
-![Kubectl Get Pods](img/kubectl-get-pods.png)
+![Kubectl Get Pods](../lgtm-stack/manual/img/kubectl-get-pods.png)
 
 ### Public Endpoints
 
@@ -163,7 +182,7 @@ Access the Grafana dashboard using the domain configured in `monitoring_domain`.
 - **Username**: `admin`
 - **Password**: *<grafana_admin_password>*
 
-![Grafana Dashboard](img/grafana-dashboard.png)
+![Grafana Dashboard](../lgtm-stack/manual/img/grafana-dashboard.png)
 
 ## Maintenance
 
