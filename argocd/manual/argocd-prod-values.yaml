@@ -37,8 +37,8 @@ server:
   # -------------------------------------
   ingress:
     enabled: true
-    ingressClassName: argocd-nginx # Points to the controller we created in Phase 1
-    hostname: "argocd.observe.camer.digital" # CHANGE THIS
+    ingressClassName: argocd-nginx # CHANGE THIS TO YOUR INGRESS CLASS NAME
+    hostname: "YOUR_ARGO-CD_DOMAIN" # CHANGE THIS
     annotations:
       # Standard Nginx tuning
       nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
@@ -52,7 +52,7 @@ server:
     tls:
       - secretName: argocd-tls-cert
         hosts:
-          - "argocd.observe.camer.digital" # CHANGE THIS
+          - "YOUR_ARGO-CD_DOMAIN" # CHANGE THIS
 
   # 3. Multi-Tenancy & RBAC
   # -----------------------
@@ -75,12 +75,12 @@ configs:
       g, ArgoCDAdmins, role:admin
   
   cm:
-    url: https://argocd.observe.camer.digital
+    url: https://YOUR_ARGO-CD_DOMAIN
     oidc.config: |
       name: Keycloak
-      issuer: https://keycloak.18.198.59.109.sslip.io/realms/argocd
+      issuer: https://keycloak.YOUR_KEYCLOAK_DOMAIN/realms/argocd
       clientID: argocd
-      clientSecret: lGH4qCY4mtEVaweAAHzktyrXTwRLHdWC # Used by the Server for Web Login
+      clientSecret: YOUR_KEYCLOAK_CLIENT_SECRET # Used by the Server for Web Login
       requestedScopes: ["openid", "profile", "email", "groups"]
       enablePKCEAuthentication: true
       # PKCE is handled automatically by the ArgoCD CLI 
