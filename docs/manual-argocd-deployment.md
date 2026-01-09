@@ -7,7 +7,6 @@ This guide walks you through manually deploying Argo CD to your Kubernetes clust
 - [Prerequisites](#prerequisites)
 - [Overview](#overview)
 - [Deployment Steps](#deployment-steps)
-- [Configuration Customization](#configuration-customization)
 - [Verification](#verification)
 - [Post-Deployment](#post-deployment)
 - [Troubleshooting](#troubleshooting)
@@ -28,9 +27,8 @@ Before deploying Argo CD, ensure you have the following:
 
 > [!IMPORTANT]
 > **Ingress Controller Required**: This deployment assumes you already have an Nginx Ingress Controller installed in your cluster. If you don't have one set up yet, please refer to the [Ingress Controller Setup Guide](./ingress-controller-setup.md) before proceeding.
+> **Cert-Manager**: For automated TLS certificate management (recommended). If not installed, see [Cert-Manager Setup Guide](./cert-manager-setup.md).
 
-- **Cert-Manager**: For automated TLS certificate management (recommended)
-  - If not installed, see [Cert-Manager Setup Guide](./cert-manager-setup.md)
 - **DNS Configuration**: A domain name pointing to your ingress controller's load balancer IP
 - **OIDC Provider** (optional): For SSO authentication (e.g., Keycloak, Okta, Google)
 
@@ -78,99 +76,39 @@ Navigate to the observability project directory and edit the Argo CD values file
 cd ../argocd/manual
 
 # Edit the values file directly
-nano argocd-prod-values.yaml
+# (You may use any editor, e.g., nano, vi, vim)
+Edit argocd-prod-values.yaml
 ```
 
 ### Step 4: Configure Your Deployment
 
-Customize the following values in `argocd-prod-values.yaml`:
+Open `argocd-prod-values.yaml` and adjust the settings to match your environment. The file is already commented to guide you through the necessary changes (Ingress hostname, Cert-Manager Issuer, OIDC configuration, etc.).
 
 > [!WARNING]
-> **Required Changes**: You MUST update these values before deployment, or the installation will fail or be misconfigured.
+> **Required Changes**: You MUST update the values in `argocd-prod-values.yaml` (especially the hostname and issuer) before deployment, or the installation will fail or be misconfigured.
 
-#### 4.1 Update Ingress Hostname
-
-```yaml
-server:
-  ingress:
-    hostname: "argocd.observe.camer.digital" # CHANGE THIS to your domain
-    tls:
-      - secretName: argocd-tls-cert
-        hosts:
-          - "argocd.observe.camer.digital" # CHANGE THIS to match above
-```
-
-Replace `argocd.observe.camer.digital` with your actual domain name.
-
-#### 4.2 Update Ingress Class (if needed)
-
-```yaml
-server:
-  ingress:
-    ingressClassName: argocd-nginx # Verify this matches your ingress controller
-```
-
-Ensure `argocd-nginx` matches the IngressClass name of your installed Nginx Ingress Controller. You can check available IngressClasses with:
-
-```bash
-kubectl get ingressclass
-```
-
-#### 4.3 Update Cert-Manager Issuer
-
-```yaml
-server:
-  ingress:
-    annotations:
-      cert-manager.io/cluster-issuer: "letsencrypt-prod" # CHANGE THIS to your issuer name
-```
-
-Update `letsencrypt-prod` to match your cert-manager ClusterIssuer or Issuer name. You can list available issuers with:
-
-```bash
-# For ClusterIssuers
-kubectl get clusterissuer
-
-# For namespace-scoped Issuers
-kubectl get issuer -n argocd
-```
-
-If using a namespace-scoped Issuer instead of ClusterIssuer, change the annotation to:
-
-```yaml
-cert-manager.io/issuer: "your-issuer-name" # CHANGE THIS to your issuer name
-```
-
-#### 4.4 Update Argo CD URL
-
-```yaml
-configs:
-  cm:
-    url: https://argocd.observe.camer.digital # CHANGE THIS to your domain
-```
-
-#### 4.5 Configure OIDC (Optional)
+#### 4.1 Configure OIDC (Optional)
 
 If you're using OIDC authentication (e.g., Keycloak), you need to deploy and configure Keycloak, then integrate it with Argo CD.
 
 > [!IMPORTANT]
-> **Keycloak Deployment and Configuration Required**: Before configuring Argo CD for OIDC, you must deploy and configure Keycloak with:
-> - A realm (e.g., `argocd`)
-> - A client (e.g., `argocd`) with appropriate redirect URIs and client secret
-> - Users and groups for authentication
-> 
-> For deployment and configuration instructions, see: [Keycloak Getting Started](https://www.keycloak.org/guides#getting-started) - Covers deployment and OIDC client setup for all platforms
+> **Keycloak Setup Required**: Before proceeding, ensure Keycloak is deployed and configured. Refer to the [Keycloak Getting Started Guide](https://www.keycloak.org/guides#getting-started) for deployment instructions across all platforms.
+>
+> During setup, ensure the following entities are created:
+> - **A Realm**: (e.g., `argocd`)
+> - **An OIDC Client**: (e.g., `argocd`) with appropriate redirect URIs and a client secret.
+> - **Users and Groups**: For authentication and access control.
 
-After deploying and configuring Keycloak, update the following in the values file:
+After deploying and configuring Keycloak, update your `argocd-prod-values.yaml` file with the following:
 
 ```yaml
 configs:
   cm:
     oidc.config: |
       name: Keycloak
-      issuer: https://keycloak.yourdomain.com/realms/argocd # CHANGE THIS TO YOUR KEYCLOAK DOMAIN ISSUER URL
+      issuer: https://keycloak.YOUR_KEYCLOAK_DOMAIN/realms/argocd # CHANGE THIS TO YOUR KEYCLOAK DOMAIN ISSUER URL
       clientID: argocd # CHANGE THIS if different
-      clientSecret: your-client-secret # CHANGE THIS to your Keycloak client secret
+      clientSecret: YOUR_KEYCLOAK_CLIENT_SECRET # CHANGE THIS to your Keycloak client secret
       requestedScopes: ["openid", "profile", "email", "groups"]
       enablePKCEAuthentication: true # In case you want to enable cli authentication
 ```
@@ -210,86 +148,6 @@ kubectl get deployments -n argocd
 ```
 
 Wait until all pods are in `Running` state and all deployments show `READY` status.
-
----
-
-## Configuration Customization
-
-### Resource Limits
-
-The reference configuration includes production-ready resource limits. Adjust these based on your cluster capacity and workload:
-
-```yaml
-controller:
-  resources:
-    limits:
-      memory: "2Gi"
-      cpu: "1"
-    requests:
-      memory: "512Mi"
-      cpu: "250m"
-
-repoServer:
-  resources:
-    limits:
-      memory: "1Gi"
-      cpu: "500m"
-```
-
-### Autoscaling
-
-Autoscaling is enabled for `repoServer` and `server` components:
-
-```yaml
-repoServer:
-  autoscaling:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 5
-
-server:
-  autoscaling:
-    enabled: true
-    minReplicas: 2
-    maxReplicas: 5
-```
-
-Adjust `minReplicas` and `maxReplicas` based on your expected load.
-
-### High Availability
-
-Redis HA is enabled for production resilience:
-
-```yaml
-redis-ha:
-  enabled: true
-  exporter:
-    enabled: true
-```
-
-For development environments, you can disable Redis HA to reduce resource usage:
-
-```yaml
-redis-ha:
-  enabled: false
-```
-
-### RBAC Policies
-
-Define custom RBAC policies for multi-tenancy:
-
-```yaml
-configs:
-  rbac:
-    policy.csv: |
-      # Example: Grant 'dev-team' access only to 'dev-project'
-      p, role:dev-team, applications, *, dev-project/*, allow
-      g, dev-user@yourcompany.com, role:dev-team
-      
-      # Default admin policy
-      g, admin, role:admin
-      g, ArgoCDAdmins, role:admin
-```
 
 ---
 
@@ -344,7 +202,7 @@ The certificate should show `Ready: True`.
 
 ### Step 4: Access Argo CD UI
 
-Open your browser and navigate to your configured domain (e.g., `https://argocd.observe.camer.digital`).
+Open your browser and navigate to your configured domain (e.g., `https://YOUR_ARGO-CD_DOMAIN`).
 
 You should see the Argo CD login page with HTTPS enabled.
 
@@ -386,7 +244,7 @@ brew install argocd
 Login to Argo CD via CLI:
 
 ```bash
-argocd login argocd.observe.camer.digital
+argocd login YOUR_ARGO-CD_DOMAIN
 ```
 
 You'll be prompted for username and password. Use:
@@ -499,4 +357,3 @@ After successfully deploying Argo CD, you can:
 3. **Deploy Applications**: Use Argo CD to manage your Kubernetes applications
 4. **Set Up Notifications**: Configure notifications for deployment events
 5. **Implement GitOps**: Adopt GitOps practices for your infrastructure
-
