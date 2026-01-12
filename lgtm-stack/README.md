@@ -1,26 +1,38 @@
 # LGTM Stack Deployment
 
-The **LGTM** stack is a comprehensive open-source observability platform powered by Grafana Labs. It provides unmatched correlation between metrics, logs, and traces, allowing complete visibility into your applications and infrastructure.
+The LGTM stack is a comprehensive open-source observability platform powered by Grafana Labs. It provides correlation between metrics, logs, and traces for complete visibility into applications and infrastructure.
 
 ## Components
 
-- **Loki**: Like Prometheus, but for logs. It is a horizontally-scalable, highly-available, multi-tenant log aggregation system.
-- **Grafana**: The open observability platform for visualization and analytics.
-- **Tempo**: A high-volume, minimal dependency distributed tracing backend.
-- **Mimir**: Scalable long-term storage for Prometheus metrics.
+- **Loki**: Horizontally-scalable, highly-available, multi-tenant log aggregation system
+- **Grafana**: Open observability platform for visualization and analytics
+- **Tempo**: High-volume, minimal dependency distributed tracing backend
+- **Mimir**: Scalable long-term storage for Prometheus metrics
 
-## Deployment Guides
+## Deployment Options
 
-This repository provides two guides to help you deploy the stack:
+### 1. Automated Deployment (Terraform)
+Fully automated deployment using Terraform for infrastructure-as-code management.
 
-### 1. Automated Deployment
-For a fully automated deployment using this stack, please refer to the [observability guide](../docs/kubernetes-observability.md).
+For detailed instructions, see the [Terraform deployment guide](../docs/kubernetes-observability.md).
 
-### 2. Manual Deployment
-If you prefer to configure and deploy components manually, or need to understand the individual steps, please refer to the [Manual LGTM Deployment Guide](../docs/manual-lgtm-deployment.md).
+### 2. Manual Deployment (Helm)
+Manual configuration and deployment for granular control over individual components.
 
-## Testing & Verification
-To verify that your deployment is working correctly, please refer to the [Testing Monitoring Stack Deployment Guide](../docs/testing-monitoring-stack-deployment.md).
+For detailed instructions, see the [Manual deployment guide](../docs/manual-lgtm-deployment.md).
+
+## Testing and Verification
+
+To verify deployment correctness, see the [Testing guide](../docs/testing-monitoring-stack-deployment.md).
 
 ## Configuration
-For detailed configuration of the Alloy collector, please refer to the [Alloy Configuration Guide](../docs/alloy-config.md).
+
+For Alloy collector configuration, see the [Alloy configuration guide](../docs/alloy-config.md).
+
+## Adoption and Troubleshooting
+
+### Adopting Existing Installation
+To manage an existing LGTM stack with Terraform, see the [Adoption guide](../docs/adopting-lgtm-stack.md).
+
+### Troubleshooting
+For common issues and solutions, see the [Troubleshooting guide](../docs/troubleshooting-lgtm-stack.md).
