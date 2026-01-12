@@ -63,7 +63,7 @@ Before deploying the stack, ensure the following requirements are met:
 
 ## Configuration
 
-The deployment is configured via Terraform variables. Copy the template to creating your configuration file:
+The deployment is configured via Terraform variables. Copy the template to create your configuration file:
 
 ```bash
 cp terraform.tfvars.template terraform.tfvars
