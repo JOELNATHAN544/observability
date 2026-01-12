@@ -20,11 +20,4 @@ A modular infrastructure-as-code repository for provisioning observability and o
 
 ---
 
-## Deployment & Documentation
 
-Detailed guides for deployment, adoption, and troubleshooting are located in the [`docs/`](docs/) directory.
-
-- **[LGTM Deployment](docs/kubernetes-observability.md)**
-- **[ArgoCD Deployment](docs/argocd-terraform-deployment.md)**
-- **[Cert-Manager Deployment](docs/cert-manager-terraform-deployment.md)**
-- **[Ingress Controller Deployment](docs/ingress-controller-terraform-deployment.md)**

@@ -69,6 +69,12 @@ gcloud iam service-accounts get-iam-policy \
 
 ## Step 2: Configure `terraform.tfvars`
 
+Navigate to the Terraform directory:
+
+```bash
+cd lgtm-stack/terraform
+```
+
 > [!IMPORTANT]
 > **Critical**: All component toggles must be set correctly before importing.
 
@@ -115,7 +121,6 @@ grafana_version    = "10.3.0"
 ## Step 3: Initialize Terraform
 
 ```bash
-cd lgtm-stack/terraform
 terraform init
 ```
 
@@ -329,10 +334,3 @@ After successful adoption:
 2. **Monitor**: Check that metrics, logs, and traces are still being ingested
 3. **Document**: Update your team's runbook with the adopted configuration
 4. **Backup**: Commit your `terraform.tfstate` to secure remote storage
-
----
-
-## See Also
-
-- [Kubernetes Observability Guide](kubernetes-observability.md)
-- [Troubleshooting LGTM Stack](troubleshooting-lgtm-stack.md)

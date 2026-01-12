@@ -1,4 +1,4 @@
-c# NGINX Ingress Controller Deployment (Terraform)
+# NGINX Ingress Controller Deployment (Terraform)
 
 This guide explains how to deploy the **NGINX Ingress Controller** using the standalone Terraform configuration.
 

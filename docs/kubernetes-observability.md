@@ -61,9 +61,18 @@ Before deploying the stack, ensure the following requirements are met:
 3. **Kubernetes Access**: `kubectl` configured with context for the target GKE cluster.
 4. **Permissions**: The authenticated user must have permissions to create GCS buckets, Service Accounts, and assign IAM roles (Storage Object Admin).
 
-## Configuration
+## Installation & Configuration
 
-The deployment is configured via Terraform variables. For detailed variable descriptions, see [variables.tf](../lgtm-stack/terraform/variables.tf).
+### 1. Clone the Repository
+
+If you haven't already, clone the project repository to your local machine.
+
+```bash
+git clone https://github.com/Adorsys-gis/observability.git
+cd observability/lgtm-stack/terraform
+```
+
+### 2. Configure Variables
 
 Copy the template to create your configuration file:
 
@@ -83,99 +92,33 @@ Edit `terraform.tfvars` to define your environment-specific values.
 | `monitoring_domain` | Base domain for monitoring services | Yes | - |
 | `letsencrypt_email` | Email for ACME registration | Yes | - |
 | `namespace` | Kubernetes namespace for stack | No | `lgtm` |
-| `k8s_service_account_name` | Kubernetes Service Account name | No | `observability-sa` |
-| `gcp_service_account_name` | GCP Service Account name | No | `gke-observability-sa` |
 | `grafana_admin_password` | Grafana admin password | Yes | - |
-| `loki_schema_from_date` | Loki schema start date (YYYY-MM-DD, must be in past) | No | `2024-01-01` |
 
-### Modular Component Variables
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `install_cert_manager` | Install Cert-Manager via Helm | `false` |
-| `cert_manager_version` | Cert-Manager chart version | `v1.16.2` |
-| `cert_manager_release_name` | Cert-Manager release name | `cert-manager` |
-| `cert_manager_namespace` | Namespace for Cert-Manager | `cert-manager` |
-| `cert_issuer_name` | Name of the certificate issuer | `letsencrypt-prod` |
-| `cert_issuer_kind` | Kind of issuer | `ClusterIssuer` |
-| `install_nginx_ingress` | Install NGINX Ingress via Helm | `false` |
-| `nginx_ingress_version` | Ingress Controller chart version | `4.14.1` |
-| `nginx_ingress_release_name` | Ingress Controller release name | `ingress-nginx` |
-| `nginx_ingress_namespace` | Namespace for Ingress Controller | `ingress-nginx` |
-| `ingress_class_name` | IngressClass name | `nginx` |
+> **Note**: For all available variables, see `variables.tf`.
 
-### Component Versions
-| Variable | Description | Default |
-| :--- | :--- | :--- |
-| `loki_version` | Loki Helm chart version | `6.20.0` |
-| `mimir_version` | Mimir Helm chart version | `5.5.0` |
-| `tempo_version` | Tempo Helm chart version | `1.57.0` |
-| `prometheus_version` | Prometheus Helm chart version | `25.27.0` |
-| `grafana_version` | Grafana Helm chart version | `10.3.0` |
+### 3. Initialize Terraform
 
-## Security Note
-> **Critical**: By default, the exposed Ingress endpoints (Loki, Mimir, Tempo) are **unauthenticated**. This design allows for flexible integration with your preferred Identity Provider (IdP) or Gateway. For production, you **MUST** implement authentication, such as `nginx.ingress.kubernetes.io/auth-url` (using OAuth2 Proxy) or restricting access to internal IPs.
+Initialize the project to download required providers and modules.
 
-### Modular Components & Shared Infrastructure
-The stack provisions **Cert-Manager** and **NGINX Ingress Controller** via internal modules. This architecture is designed for flexibility but requires careful management of "shared infrastructure" to avoid resource conflicts.
+```bash
+terraform init
+```
 
-**Ownership Model**
-If you deploy multiple stacks (e.g., this LGTM stack AND the ArgoCD stack from this repository), both will attempt to install these shared components by default.
+### 4. Plan Deployment
 
-**Strategy for Multi-Stack Deployment:**
-1.  **Designate an Owner**: Choose ONE stack to manage the infrastructure (e.g., `lgtm-stack`).
-2.  **Toggle Off in Others**: In the second stack (e.g., `argocd`), set `install_cert_manager = false` and `install_nginx_ingress = false` in `terraform.tfvars`.
-3.  **Adopting Existing State (Advanced)**:
-    If you have already applied both and have conflicts, or want to transfer ownership, use `terraform import` to bring the existing Helm releases into your preferred state file.
+Generate an execution plan to verify the resources that will be created.
 
-    *Example Import:*
-    ```bash
-    # Import existing NGINX release into LGTM stack state
-    terraform import module.ingress_nginx.helm_release.nginx_ingress[0] ingress-nginx/nginx-monitoring
-    ```
+```bash
+terraform plan
+```
 
-    *See [Terraform Deployment Guide](../docs/ingress-controller-terraform-deployment.md) for detailed import instructions.*
+### 5. Apply Configuration
 
-## Installation
+Execute the plan to provision infrastructure and deploy the application stack.
 
-1. **Verify Context**
-   Make sure you are context-switched to the correct cluster.
-   ```bash
-   kubectl config current-context
-   ```
-
-2. **Clone the Repository**
-
-    If you haven't already, clone the project repository to your local machine.
-
-    ```bash
-    git clone https://github.com/Adorsys-gis/observability.git
-    cd observability
-    ```
-
-3. **Initialize Terraform**
-
-    Navigate to the Terraform directory and initialize the project to download required providers and modules.
-
-    ```bash
-    cd lgtm-stack/terraform
-    terraform init
-    ```
-
-4. **Plan Deployment**
-
-    Generate an execution plan to verify the resources that will be created.
-
-    ```bash
-    terraform plan
-    ```
-
-5. **Apply Configuration**
-
-    Execute the plan to provision infrastructure and deploy the application stack.
-
-    ```bash
-    terraform apply
-    ```
+```bash
+terraform apply
+```
 
 ## Verification
 
@@ -187,7 +130,7 @@ Verify that all pods are running successfully in the `<NAMESPACE>` (default: `ob
 kubectl get pods -n <NAMESPACE>
 ```
 
-![Kubectl Get Pods](../lgtm-stack/manual/img/kubectl-get-pods.png)
+![Kubectl Get Pods](img/kubectl-get-pods.png)
 
 ### Public Endpoints
 
@@ -238,7 +181,7 @@ Access the Grafana dashboard using the domain configured in `monitoring_domain`.
 - **Username**: `admin`
 - **Password**: *<grafana_admin_password>*
 
-![Grafana Dashboard](../lgtm-stack/manual/img/grafana-dashboard.png)
+![Grafana Dashboard](img/grafana-dashboard.png)
 
 ## Maintenance
 

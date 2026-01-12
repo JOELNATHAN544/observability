@@ -42,6 +42,12 @@ kubectl get clusterissuers,issuers -A
 
 ## Step 2: Configure `terraform.tfvars`
 
+Navigate to the Terraform directory:
+
+```bash
+cd cert-manager/terraform
+```
+
 > [!IMPORTANT]
 > **Critical**: You MUST set `install_cert_manager = true` to create the Terraform resource configuration before importing.
 
@@ -67,7 +73,6 @@ cert_issuer_kind  = "ClusterIssuer"                 # Or "Issuer"
 ## Step 3: Initialize Terraform
 
 ```bash
-cd cert-manager/terraform
 terraform init
 ```
 
@@ -173,9 +178,3 @@ After successful adoption:
 2. **Document**: Update your team's runbook with the adopted configuration
 3. **Backup**: Commit your `terraform.tfstate` to secure remote storage
 
----
-
-## See Also
-
-- [Cert-Manager Terraform Deployment Guide](cert-manager-terraform-deployment.md)
-- [Troubleshooting Cert-Manager](troubleshooting-cert-manager.md)

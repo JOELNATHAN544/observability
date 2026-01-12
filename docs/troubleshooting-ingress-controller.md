@@ -292,8 +292,3 @@ kubectl run -it --rm debug --image=curlimages/curl --restart=Never -- \
 
 ---
 
-## See Also
-
-- [NGINX Ingress Official Troubleshooting](https://kubernetes.github.io/ingress-nginx/troubleshooting/)
-- [Adopting Ingress Controller](adopting-ingress-controller.md)
-- [Ingress Controller Terraform Deployment](ingress-controller-terraform-deployment.md)
