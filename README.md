@@ -1,29 +1,34 @@
-# Kubernetes Observability Platform
+# Kubernetes Observability & Operations
 
-Comprehensive observability and operations infrastructure for Kubernetes, integrating monitoring, logging, tracing, and automated certificate management.
+A modular infrastructure-as-code repository for provisioning observability and operations platforms on Kubernetes.
 
-## Components
+## Core Platforms
 
-**Observability Stack**
-- Loki - Log aggregation
-- Grafana - Metrics visualization  
-- Tempo - Distributed tracing
-- Mimir - Long-term metrics storage
+**Observability (LGTM)**
+[`lgtm-stack/`](lgtm-stack/README.md)
+Comprehensive monitoring, logging, and tracing stack powered by Grafana, Loki, Tempo, and Mimir.
 
-**Operations**
-- ArgoCD - GitOps continuous delivery
-- Cert-Manager - Automated TLS certificates
-- NGINX Ingress - Traffic routing
+**GitOps Delivery**
+[`argocd/`](argocd/README.md)
+Declarative continuous delivery engine for managing cluster workloads and configurations.
 
-## Getting Started
+## Cluster Infrastructure
 
-Each component includes detailed deployment guides:
+**Certificate Management**
+[`cert-manager/`](cert-manager/README.md)
+Automated TLS certificate issuance and renewal via Let's Encrypt.
 
-- [LGTM Stack](lgtm-stack/README.md) - Complete observability platform
-- [ArgoCD](argocd/README.md) - GitOps delivery
-- [Cert-Manager](cert-manager/README.md) - Certificate management  
-- [Ingress Controller](ingress-controller/README.md) - Traffic routing
+**Traffic Management**
+[`ingress-controller/`](ingress-controller/README.md)
+NGINX-based ingress controller for external traffic routing and load balancing.
 
-## Documentation
+---
 
-Full deployment guides and references are available in the [`docs/`](docs/) directory.
+## Deployment & Documentation
+
+Detailed guides for deployment, adoption, and troubleshooting are located in the [`docs/`](docs/) directory.
+
+- **[LGTM Deployment](docs/kubernetes-observability.md)**
+- **[ArgoCD Deployment](docs/argocd-terraform-deployment.md)**
+- **[Cert-Manager Deployment](docs/cert-manager-terraform-deployment.md)**
+- **[Ingress Controller Deployment](docs/ingress-controller-terraform-deployment.md)**
