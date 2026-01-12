@@ -1,4 +1,4 @@
-keycloak_url      = "https://keycloak.18.198.59.109.sslip.io"
+keycloak_url      = "https://keycloak_domain_name"
 keycloak_user     = "admin"
 keycloak_password = "your-strong-secret-password" # this is to authenticate to keycloak
 argocd_url        = "https://example.com"
