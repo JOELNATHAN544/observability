@@ -16,7 +16,7 @@ resource "keycloak_openid_client" "argocd" {
   # This must match your ArgoCD URL exactly
   valid_redirect_uris = [
     "${var.argocd_url}/auth/callback",
-    "${var.argocd_url}/*"  # Temporary wildcard to troubleshoot
+    "${var.argocd_url}/*" # Temporary wildcard to troubleshoot
   ]
 }
 
@@ -42,7 +42,7 @@ resource "keycloak_openid_group_membership_protocol_mapper" "groups" {
   client_id  = keycloak_openid_client.argocd.id
   name       = "group-mapper"
   claim_name = "groups"
-  full_path = false
+  full_path  = false
 }
 
 # =============================================================================
@@ -56,8 +56,8 @@ resource "helm_release" "argocd-test" {
   chart            = "argo-cd"
   namespace        = "argocd-test"
   create_namespace = true
-  version          = "5.51.0" 
-  skip_crds = true
+  version          = "5.51.0"
+  skip_crds        = false
 
   # Using values (YAML) instead of set avoids comma parsing errors entirely
   values = [
@@ -129,6 +129,6 @@ module "ingress_nginx" {
 # =============================================================================
 
 output "argocd_admin_secret" {
-  value = keycloak_openid_client.argocd.client_secret
+  value     = keycloak_openid_client.argocd.client_secret
   sensitive = true
 }

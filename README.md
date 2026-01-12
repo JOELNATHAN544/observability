@@ -19,6 +19,8 @@ This repository provisions a comprehensive, production-grade observability and o
 
 This project is built with **Terraform** and **Helm**, designed for modularity. You can deploy the entire stack or individual components as needed.
 
+> **Architecture Note**: This repository contains multiple deployable stacks (LGTM, ArgoCD) that share core infrastructure (Cert-Manager, Ingress). To prevent conflicts, ensure only **one** stack manages these shared resources, or use `terraform import` to adopt them into the correct state. See the [Shared Infrastructure Guide](docs/kubernetes-observability.md#modular-components--shared-infrastructure) for details.
+
 *   **[`lgtm-stack/`](lgtm-stack/README.md)**: The core internal monitoring platform.
 *   **[`argocd/`](argocd/README.md)**: The GitOps delivery engine.
 *   **[`cert-manager/`](cert-manager/README.md)**: Certificate management infrastructure.

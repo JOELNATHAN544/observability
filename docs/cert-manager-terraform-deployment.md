@@ -59,15 +59,15 @@ cd observability
 
 ## Variables
 
-| Name | Description | Default |
-|------|-------------|---------|
-| `install_cert_manager` | Install Cert-Manager via Helm | `false` |
-| `release_name` | Helm Release Name | `cert-manager` |
-| `cert_manager_version` | Chart version | `v1.15.0` |
-| `namespace` | Namespace to install into | `cert-manager` |
-| `letsencrypt_email` | Email for ACME registration | **Required** |
-| `cert_issuer_name` | Name of ClusterIssuer/Issuer | `letsencrypt-prod` |
-| `cert_issuer_kind` | Kind of Issuer (`ClusterIssuer` or `Issuer`) | `ClusterIssuer` |
-| `issuer_namespace` | Namespace for Issuer (if Kind is Issuer). Defaults to install namespace. | `null` |
-| `ingress_class_name` | Ingress class for solving challenges | `nginx` |
-| `issuer_server` | ACME server URL | `https://acme-v02...` |
+For detailed variable descriptions, see [variables.tf](../cert-manager/terraform/variables.tf).
+
+| Variable | Description | Default |
+|----------|-------------|---------|  
+| `install_cert_manager` | Enable Cert-Manager installation | `false` |
+| `release_name` | Helm release name | `cert-manager` |
+| `namespace` | Kubernetes namespace | `cert-manager` |
+| `cert_manager_version` | Helm chart version | `v1.16.2` |
+| `letsencrypt_email` | Email for Let's Encrypt notifications | **Required** |
+| `cert_issuer_kind` | Issuer type: `ClusterIssuer` or `Issuer` | `ClusterIssuer` |
+| `cert_issuer_name` | Name of the issuer | `letsencrypt-prod` |
+| `issuer_namespace` | Namespace for Issuer (only if `cert_issuer_kind = "Issuer"`) | `cert-manager` |

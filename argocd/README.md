@@ -16,9 +16,16 @@ The manual deployment uses the production-ready values file located at [`argocd/
 
 ### 2. Automated Deployment (Terraform)
 
-Deploy Argo CD automatically using Terraform for infrastructure-as-code management
+Deploy Argo CD automatically using Terraform for infrastructure-as-code management.
 
-**[Automated Deployment Guide](#)** *(Coming soon)*
+**[Automated Deployment Guide](terraform/)** - See the `terraform/` directory for configuration files and `terraform.tfvars.template`.
 
-The automated deployment is located in the [`argocd/terraform/`](terraform) directory.
+---
 
+## Adoption & Troubleshooting
+
+### Adopting Existing Installation
+If you have an existing ArgoCD installation and want to manage it with Terraform, see the [Adoption Guide](../docs/adopting-argocd.md).
+
+### Troubleshooting
+For common issues and their solutions, see the [Troubleshooting Guide](../docs/troubleshooting-argocd.md).

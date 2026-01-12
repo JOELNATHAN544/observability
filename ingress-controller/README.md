@@ -17,34 +17,10 @@ For detailed instructions, see the [Terraform deployment guide](../docs/ingress-
 ### 2. Manual (Helm)
 If you prefer to deploy manually using Helm, you can follow the [manual deployment guide](../docs/ingress-controller-manual-deployment.md).
 
-## Troubleshooting
+## Adoption & Troubleshooting
 
-### Deployment Flags
-Ensure variables are set correctly in `terraform.tfvars`:
-```hcl
-install_nginx_ingress = true
-```
+### Adopting Existing Installation
+If you have an existing Ingress Controller and want to manage it with Terraform, see the [Adoption Guide](../docs/adopting-ingress-controller.md).
 
-### Common Issues
-
-**LoadBalancer External IP Pending**
-```bash
-# Check service status for EXTERNAL-IP
-kubectl get svc -n ingress-nginx
-
-# Fix: Verify GCP LoadBalancer quota or cloud-controller logs
-```
-
-**404 Not Found**
-```bash
-# Verify Ingress resource points to valid Service/Port
-kubectl describe ingress <name> -n <namespace>
-
-# Fix: Ensure Ingress Class is set to 'nginx'
-```
-
-**SSL Certificate Issues**
-```bash
-# Check secret name in TLS section matches Cert-Manager secret
-kubectl describe ingress <name> -n <namespace>
-```
+### Troubleshooting
+For common issues and their solutions, see the [Troubleshooting Guide](../docs/troubleshooting-ingress-controller.md).

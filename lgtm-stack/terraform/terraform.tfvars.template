@@ -1,53 +1,47 @@
-# ------------------------------------------------------------------------------
-# GCP & Cluster Configuration
-# ------------------------------------------------------------------------------
-project_id       = "your-project-id"
+# ==============================================================================
+# LGTM Stack Configuration
+# ==============================================================================
+# See: docs/adopting-lgtm-stack.md | docs/troubleshooting-lgtm-stack.md
+
+# GCP & Cluster
+project_id       = "your-gcp-project-id"
 region           = "us-central1"
 cluster_name     = "your-cluster-name"
-cluster_location = "us-central1-a"
+cluster_location = "us-central1"
 
-# ------------------------------------------------------------------------------
 # Environment & Domain
-# ------------------------------------------------------------------------------
 environment       = "production"
-monitoring_domain = "observe.example.com"
+monitoring_domain = "monitoring.example.com"
 letsencrypt_email = "admin@example.com"
 
-# ------------------------------------------------------------------------------
-# Kubernetes Configuration
-# ------------------------------------------------------------------------------
-namespace                = "observability"
+# Kubernetes
+namespace                = "lgtm"
 k8s_service_account_name = "observability-sa"
 gcp_service_account_name = "gke-observability-sa"
 
-# ------------------------------------------------------------------------------
-# Modular Components (Adoption or New Install)
-# ------------------------------------------------------------------------------
-# 1. Cert-Manager
-# Set install_cert_manager = true to install OR adopt existing.
-install_cert_manager      = false
+# Shared Infrastructure (set to false if managed elsewhere)
+install_cert_manager  = false
+install_nginx_ingress = false
+
+# Cert-Manager (only used if install_cert_manager = true)
+cert_manager_version      = "v1.16.2"
 cert_manager_release_name = "cert-manager"
 cert_manager_namespace    = "cert-manager"
 cert_issuer_name          = "letsencrypt-prod"
 cert_issuer_kind          = "ClusterIssuer"
 
-# 2. Ingress Controller
-# Set install_nginx_ingress = true to install OR adopt existing.
-install_nginx_ingress      = false
-nginx_ingress_release_name = "nginx-monitoring"
+# Ingress Controller (only used if install_nginx_ingress = true)
+nginx_ingress_version      = "4.14.1"
+nginx_ingress_release_name = "ingress-nginx"
 nginx_ingress_namespace    = "ingress-nginx"
 ingress_class_name         = "nginx"
 
-# ------------------------------------------------------------------------------
 # Application Configuration
-# ------------------------------------------------------------------------------
-grafana_admin_password = "supersecretpassword"
-loki_schema_from_date  = "2024-01-01"
+grafana_admin_password = "change-this-secure-password"
+loki_schema_from_date  = "2024-01-01"  # Must be in the past
 
-# ------------------------------------------------------------------------------
-# Component Versions (Optional Overrides)
-# ------------------------------------------------------------------------------
-loki_version       = "6.6.4"
+# Component Versions (Helm chart versions)
+loki_version       = "6.20.0"
 mimir_version      = "5.5.0"
 tempo_version      = "1.57.0"
 prometheus_version = "25.27.0"

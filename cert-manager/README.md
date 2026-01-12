@@ -17,32 +17,10 @@ For detailed instructions, see the [Terraform deployment guide](../docs/cert-man
 ### 2. Manual (Helm & Kubectl)
 If you prefer to deploy manually using CLI tools, you can follow the [manual deployment guide](../docs/cert-manager-manual-deployment.md).
 
-## Troubleshooting
+## Adoption & Troubleshooting
 
-### Deployment Flags
-Ensure variables are set correctly in `terraform.tfvars`:
-```hcl
-install_cert_manager = true
-```
+### Adopting Existing Installation
+If you have an existing Cert-Manager installation and want to manage it with Terraform, see the [Adoption Guide](../docs/adopting-cert-manager.md).
 
-### Common Issues
-
-**Webhook Pod Not Ready**
-```bash
-# Check pod status (look for CrashLoopBackOff)
-kubectl get pods -n cert-manager
-
-# Fix: Ensure installCRDs=true is set in Helm release
-```
-
-**Certificate Stuck in "False" State**
-```bash
-# Check certificate events for challenge failures
-kubectl describe certificate <name> -n <namespace>
-```
-
-**Issuer Not Ready**
-```bash
-# Check issuer status and ACME server URL
-kubectl describe clusterissuer letsencrypt-prod
-```
+### Troubleshooting
+For common issues and their solutions, see the [Troubleshooting Guide](../docs/troubleshooting-cert-manager.md).

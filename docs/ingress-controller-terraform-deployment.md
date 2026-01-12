@@ -1,4 +1,4 @@
-# NGINX Ingress Controller Deployment (Terraform)
+c# NGINX Ingress Controller Deployment (Terraform)
 
 This guide explains how to deploy the **NGINX Ingress Controller** using the standalone Terraform configuration.
 
@@ -76,11 +76,13 @@ If the **NGINX Ingress Controller** is already installed and you want Terraform 
 
 ## Variables
 
-| Name | Description | Default |
-|------|-------------|---------|
-| `install_nginx_ingress` | Install NGINX Ingress | `false` |
-| `nginx_ingress_version` | Chart version | `4.10.1` |
-| `namespace` | Namespace to install into | `ingress-nginx` |
-| `ingress_class_name` | Ingress Class Name | `nginx` |
-| `replica_count` | Controller Replicas | `1` |
-| `release_name` | Helm Release Name | `nginx-monitoring` |
+For detailed variable descriptions, see [variables.tf](../ingress-controller/terraform/variables.tf).
+
+| Variable | Description | Default |
+|----------|-------------|---------|  
+| `install_nginx_ingress` | Enable NGINX Ingress installation | `false` |
+| `release_name` | Helm release name | `ingress-nginx` |
+| `namespace` | Kubernetes namespace | `ingress-nginx` |
+| `nginx_ingress_version` | Helm chart version | `4.14.1` |
+| `replica_count` | Number of controller replicas | `1` |
+| `ingress_class_name` | IngressClass name (immutable after creation) | `nginx` |

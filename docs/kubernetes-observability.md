@@ -63,7 +63,9 @@ Before deploying the stack, ensure the following requirements are met:
 
 ## Configuration
 
-The deployment is configured via Terraform variables. Copy the template to create your configuration file:
+The deployment is configured via Terraform variables. For detailed variable descriptions, see [variables.tf](../lgtm-stack/terraform/variables.tf).
+
+Copy the template to create your configuration file:
 
 ```bash
 cp terraform.tfvars.template terraform.tfvars
@@ -73,54 +75,65 @@ Edit `terraform.tfvars` to define your environment-specific values.
 
 | Variable | Description | Required | Default |
 | :--- | :--- | :---: | :--- |
-| `project_id` | Google Cloud Project ID. | Yes | - |
-| `cluster_name` | Name of the target GKE cluster. | Yes | - |
-| `region` | GCP Region for resources (e.g., `europe-west3`). | No | `us-central1` |
-| `cluster_location` | Location of the GKE cluster. | Yes | - |
-| `environment` | Environment label (e.g., `prod`). | No | `production` |
-| `namespace` | K8s Namespace for stack. | No | `observability` |
-| `monitoring_domain` | Base domain for endpoints (e.g., `obs.example.com`). | Yes | - |
-| `letsencrypt_email` | Email for ACME registration. | Yes | - |
-| `grafana_admin_password` | Initial admin password for Grafana. | Yes | - |
-| `k8s_service_account_name` | K8s Service Account Name. | No | `observability-sa` |
-| `gcp_service_account_name` | GCP Service Account Name. | No | `gke-observability-sa` |
-| `ingress_class_name` | Ingress Class Name (e.g., `nginx`). | No | `nginx` |
-| `cert_issuer_name` | Name of the Cert-Manager Issuer. | No | `letsencrypt-prod` |
-| `cert_issuer_kind` | Kind of Issuer (`ClusterIssuer`). | No | `ClusterIssuer` |
+| `project_id` | Google Cloud Project ID | Yes | - |
+| `region` | GCP Region for resources | No | `us-central1` |
+| `cluster_name` | Name of the target GKE cluster | Yes | - |
+| `cluster_location` | Location of the GKE cluster | Yes | - |
+| `environment` | Environment label | No | `production` |
+| `monitoring_domain` | Base domain for monitoring services | Yes | - |
+| `letsencrypt_email` | Email for ACME registration | Yes | - |
+| `namespace` | Kubernetes namespace for stack | No | `lgtm` |
+| `k8s_service_account_name` | Kubernetes Service Account name | No | `observability-sa` |
+| `gcp_service_account_name` | GCP Service Account name | No | `gke-observability-sa` |
+| `grafana_admin_password` | Grafana admin password | Yes | - |
+| `loki_schema_from_date` | Loki schema start date (YYYY-MM-DD, must be in past) | No | `2024-01-01` |
 
 ### Modular Component Variables
 | Variable | Description | Default |
 | :--- | :--- | :--- |
-| `install_cert_manager` | Install Cert-Manager via Helm. | `false` |
-| `cert_manager_version` | Cert-Manager chart version. | `v1.15.0` |
-| `cert_manager_release_name` | Cert-Manager release name. | `cert-manager` |
-| `cert_manager_namespace` | Namespace for Cert-Manager. | `cert-manager` |
-| `install_nginx_ingress` | Install NGINX Ingress via Helm. | `false` |
-| `nginx_ingress_version` | Ingress Controller chart version. | `4.10.1` |
-| `nginx_ingress_release_name` | Ingress Controller release name. | `nginx-monitoring` |
-| `nginx_ingress_namespace` | Namespace for Ingress Controller. | `ingress-nginx` |
+| `install_cert_manager` | Install Cert-Manager via Helm | `false` |
+| `cert_manager_version` | Cert-Manager chart version | `v1.16.2` |
+| `cert_manager_release_name` | Cert-Manager release name | `cert-manager` |
+| `cert_manager_namespace` | Namespace for Cert-Manager | `cert-manager` |
+| `cert_issuer_name` | Name of the certificate issuer | `letsencrypt-prod` |
+| `cert_issuer_kind` | Kind of issuer | `ClusterIssuer` |
+| `install_nginx_ingress` | Install NGINX Ingress via Helm | `false` |
+| `nginx_ingress_version` | Ingress Controller chart version | `4.14.1` |
+| `nginx_ingress_release_name` | Ingress Controller release name | `ingress-nginx` |
+| `nginx_ingress_namespace` | Namespace for Ingress Controller | `ingress-nginx` |
+| `ingress_class_name` | IngressClass name | `nginx` |
 
-### Version Overrides
+### Component Versions
 | Variable | Description | Default |
 | :--- | :--- | :--- |
-| `loki_version` | Loki Helm chart version. | `6.6.4` |
-| `mimir_version` | Mimir Helm chart version. | `5.5.0` |
-| `tempo_version` | Tempo Helm chart version. | `1.57.0` |
-| `prometheus_version` | Prometheus Helm chart version. | `25.27.0` |
-| `grafana_version` | Grafana Helm chart version. | `10.3.0` |
-| `loki_schema_from_date` | Date for Loki schema start (YYYY-MM-DD). | `2024-01-01` |
+| `loki_version` | Loki Helm chart version | `6.20.0` |
+| `mimir_version` | Mimir Helm chart version | `5.5.0` |
+| `tempo_version` | Tempo Helm chart version | `1.57.0` |
+| `prometheus_version` | Prometheus Helm chart version | `25.27.0` |
+| `grafana_version` | Grafana Helm chart version | `10.3.0` |
 
-### Modular Components
-The stack automatically provisions **Cert-Manager** and **NGINX Ingress Controller** by default using the internal modules. You can control this via:
+## Security Note
+> **Critical**: By default, the exposed Ingress endpoints (Loki, Mimir, Tempo) are **unauthenticated**. This design allows for flexible integration with your preferred Identity Provider (IdP) or Gateway. For production, you **MUST** implement authentication, such as `nginx.ingress.kubernetes.io/auth-url` (using OAuth2 Proxy) or restricting access to internal IPs.
 
-- `install_cert_manager` (default: `false` - Must be enabled if Cert-Manager is not already present)
-- `install_nginx_ingress` (default: `false` - Must be enabled if Ingress Controller is not already present)
+### Modular Components & Shared Infrastructure
+The stack provisions **Cert-Manager** and **NGINX Ingress Controller** via internal modules. This architecture is designed for flexibility but requires careful management of "shared infrastructure" to avoid resource conflicts.
 
-> **Important**: Set these to `true` in your `terraform.tfvars` if you are doing a fresh install of the entire stack and need these components.
+**Ownership Model**
+If you deploy multiple stacks (e.g., this LGTM stack AND the ArgoCD stack from this repository), both will attempt to install these shared components by default.
 
-If you prefer to deploy them standalone or manually, refer to their respective documentation:
-- [Cert-Manager Documentation](../cert-manager/README.md) - *See [Terraform Deployment Guide](../docs/cert-manager-terraform-deployment.md#variables) for full configuration options.*
-- [Ingress Controller Documentation](../ingress-controller/README.md) - *See [Terraform Deployment Guide](../docs/ingress-controller-terraform-deployment.md#variables) for full configuration options.*
+**Strategy for Multi-Stack Deployment:**
+1.  **Designate an Owner**: Choose ONE stack to manage the infrastructure (e.g., `lgtm-stack`).
+2.  **Toggle Off in Others**: In the second stack (e.g., `argocd`), set `install_cert_manager = false` and `install_nginx_ingress = false` in `terraform.tfvars`.
+3.  **Adopting Existing State (Advanced)**:
+    If you have already applied both and have conflicts, or want to transfer ownership, use `terraform import` to bring the existing Helm releases into your preferred state file.
+
+    *Example Import:*
+    ```bash
+    # Import existing NGINX release into LGTM stack state
+    terraform import module.ingress_nginx.helm_release.nginx_ingress[0] ingress-nginx/nginx-monitoring
+    ```
+
+    *See [Terraform Deployment Guide](../docs/ingress-controller-terraform-deployment.md) for detailed import instructions.*
 
 ## Installation
 
