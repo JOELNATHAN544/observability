@@ -4,23 +4,19 @@ A modular infrastructure-as-code repository for provisioning observability and o
 
 ## Core Platforms
 
-**Observability (LGTM)**
-[`lgtm-stack/`](lgtm-stack/README.md)
-Comprehensive monitoring, logging, and tracing stack powered by Grafana, Loki, Tempo, and Mimir.
+- **[Observability (LGTM)](lgtm-stack/README.md)**  
+  Comprehensive monitoring, logging, and tracing stack powered by Grafana, Loki, Tempo, and Mimir.
 
-**GitOps Delivery**
-[`argocd/`](argocd/README.md)
-Declarative continuous delivery engine for managing cluster workloads and configurations.
+- **[GitOps Delivery](argocd/README.md)**  
+  Declarative continuous delivery engine for managing cluster workloads and configurations.
 
 ## Cluster Infrastructure
 
-**Certificate Management**
-[`cert-manager/`](cert-manager/README.md)
-Automated TLS certificate issuance and renewal via Let's Encrypt.
+- **[Certificate Management](cert-manager/README.md)**  
+  Automated TLS certificate issuance and renewal via Let's Encrypt.
 
-**Traffic Management**
-[`ingress-controller/`](ingress-controller/README.md)
-NGINX-based ingress controller for external traffic routing and load balancing.
+- **[Traffic Management](ingress-controller/README.md)**  
+  NGINX-based ingress controller for external traffic routing and load balancing.
 
 ---
 
