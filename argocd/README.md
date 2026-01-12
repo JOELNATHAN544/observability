@@ -13,7 +13,7 @@ ArgoCD provides:
 ### 1. Automated Deployment (Terraform)
 This method uses the Terraform configuration located in the `terraform/` directory. It is the recommended approach for automation.
 
-For detailed instructions, see the [Terraform deployment guide](terraform/) or the `terraform.tfvars.template`.
+For detailed instructions, see the [Terraform deployment guide](../docs/argocd-terraform-deployment.md).
 
 ### 2. Manual (Helm)
 If you prefer to deploy manually using Helm, you can follow the [manual deployment guide](../docs/manual-argocd-deployment.md).
