@@ -1,26 +1,24 @@
-# Argo CD Deployment Guide
+# ArgoCD Deployment
 
-Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. It automates the deployment of applications by continuously monitoring Git repositories and synchronizing the desired application state with the live state in your Kubernetes cluster.
+This directory contains infrastructure-as-code and configuration for deploying **ArgoCD** to enable GitOps continuous delivery for the Kubernetes cluster.
+
+ArgoCD provides:
+*   **GitOps Workflow**: Declarative application deployment from Git repositories.
+*   **Automated Sync**: Continuously monitors and synchronizes desired state with live cluster state.
+*   **Multi-Cluster Support**: Manage applications across multiple Kubernetes clusters.
+*   **OIDC Integration**: Keycloak-based authentication and RBAC.
 
 ## Deployment Options
 
-We provide two ways to deploy Argo CD to your Kubernetes cluster:
+### 1. Automated Deployment (Terraform)
+This method uses the Terraform configuration located in the `terraform/` directory. It is the recommended approach for automation.
 
-### 1. Manual Deployment
+For detailed instructions, see the [Terraform deployment guide](terraform/) or the `terraform.tfvars.template`.
 
-Deploy Argo CD manually using Helm with customizable values files. This approach gives you full control over the configurations.
-
-**[Manual Deployment Guide](../docs/manual-argocd-deployment.md)**
+### 2. Manual (Helm)
+If you prefer to deploy manually using Helm, you can follow the [manual deployment guide](../docs/manual-argocd-deployment.md).
 
 The manual deployment uses the production-ready values file located at [`argocd/manual/argocd-prod-values.yaml`](manual/argocd-prod-values.yaml).
-
-### 2. Automated Deployment (Terraform)
-
-Deploy Argo CD automatically using Terraform for infrastructure-as-code management.
-
-**[Automated Deployment Guide](terraform/)** - See the `terraform/` directory for configuration files and `terraform.tfvars.template`.
-
----
 
 ## Adoption & Troubleshooting
 
