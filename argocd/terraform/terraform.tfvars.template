@@ -10,8 +10,9 @@ keycloak_password = "your-secure-password"
 target_realm      = "argocd"
 
 # ArgoCD Configuration
-argocd_url   = "https://argocd.example.com"
-kube_context = "gke_your-project_us-central1_your-cluster"
+argocd_url     = "https://argocd.example.com"
+argocd_version = "7.7.12"
+kube_context   = "gke_your-project_us-central1_your-cluster"
 namespace    = "argocd"
 
 # Shared Infrastructure

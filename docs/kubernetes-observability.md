@@ -1,225 +1,354 @@
-# Kubernetes Observability Stack
+# Kubernetes Observability Stack - Terraform Deployment
 
-This document describes the architecture, deployment, and configuration of a production-grade observability stack on Google Kubernetes Engine (GKE). The stack integrates Loki, Grafana, Tempo, and Mimir (LGTM) with Prometheus to provide a complete monitoring solution for logs, metrics, and traces for any application or infrastructure.
-
-## Overview
-
-The observability stack is designed to be production-ready, scalable, and portable. It leverages:
-
-- **Loki**: For distributed logging.
-- **Mimir**: For long-term Prometheus metrics storage.
-- **Tempo**: For distributed tracing.
-- **Prometheus**: For metrics collection and scraping.
-- **Grafana**: For data visualization and dashboarding.
-- **Google Cloud Storage (GCS)**: For cost-effective, durable backend storage.
-
-Infrastructure provisioning and application deployment are fully automated using Terraform and Helm.
+Production-grade LGTM (Loki, Grafana, Tempo, Mimir) observability stack deployment on Google Kubernetes Engine using Terraform and Helm.
 
 ## Architecture
 
-The system is composed of modular components:
+The stack provides comprehensive observability through integrated logging, metrics, and tracing with durable object storage.
 
-1.  **Core Stack (LGTM)**: The main observability components.
-2.  **Cert-Manager**: Manages TLS certificates (Modular, can be deployed standalone).
-3.  **Ingress Controller**: Manages external access (Modular, can be deployed standalone).
+### Components
+
+| Component | Purpose | Storage Backend |
+|-----------|---------|----------------|
+| **Loki** | Distributed log aggregation | GCS (chunks, ruler) |
+| **Mimir** | Long-term Prometheus metrics storage | GCS (blocks, ruler) |
+| **Tempo** | Distributed tracing backend | GCS (traces) |
+| **Prometheus** | Metrics collection and scraping | Remote write to Mimir |
+| **Grafana** | Visualization and dashboarding | - |
+
+### Infrastructure Flow
 
 ```mermaid
 graph TD
-    User([User / External Traffic]) -->|HTTPS| LB[GCP LoadBalancer]
-    LB -->|Routing| Ingress[Ingress Controller]
+    User([External Traffic]) -->|HTTPS| LB[GCP Load Balancer]
+    LB -->|Routes by Host| Ingress[NGINX Ingress Controller]
     
-    subgraph "GKE Cluster (Namespace: observability)"
-        Ingress -->|Host: grafana.*| Grafana[Grafana UI]
-        Ingress -->|Host: loki.*| Loki[Loki Gateway]
-        Ingress -->|Host: mimir.*| Mimir[Mimir Gateway]
-        Ingress -->|Host: tempo.*| Tempo[Tempo Gateway]
-        Ingress -->|Host: prometheus.*| Prom[Prometheus]
+    subgraph "GKE Cluster - Namespace: observability"
+        Ingress -->|grafana.*| Grafana[Grafana UI]
+        Ingress -->|loki.*| Loki[Loki Gateway]
+        Ingress -->|mimir.*| Mimir[Mimir Gateway]
+        Ingress -->|tempo.*| Tempo[Tempo Gateway]
+        Ingress -->|prometheus.*| Prom[Prometheus]
         
         Prom -->|Remote Write| Mimir
-        Prom -->|Scrape| K8s[K8s Metrics]
+        Prom -->|Scrape| K8s[Kubernetes Metrics]
     end
     
     subgraph "Google Cloud Platform"
-        IAM[IAM & Workload Identity]
-        GCS[(Google Cloud Storage)]
+        GCS[(Cloud Storage Buckets)]
+        IAM[Workload Identity]
     end
     
     Loki -->|Read/Write| GCS
     Mimir -->|Read/Write| GCS
     Tempo -->|Read/Write| GCS
     
-    K8sSA[K8s ServiceAccount] -.->|Impersonates| GCPSA[GCP ServiceAccount]
-    GCPSA -->|IAM Roles| GCS
+    K8sSA[K8s ServiceAccount] -.->|Impersonates via WI| GCPSA[GCP ServiceAccount]
+    GCPSA -->|Storage Admin| GCS
 ```
+
+### Modular Components
+
+The stack includes optional infrastructure components:
+
+- **Cert-Manager**: TLS certificate automation (optional, can be shared)
+- **NGINX Ingress**: External traffic management (optional, can be shared)
+
+Set `install_cert_manager` and `install_nginx_ingress` to `false` in `terraform.tfvars` if these components are managed by other stacks.
 
 ## Prerequisites
 
-Before deploying the stack, ensure the following requirements are met:
+| Requirement | Version | Purpose |
+|-------------|---------|---------|
+| **Terraform** | ≥ 1.5.0 | Infrastructure provisioning |
+| **Google Cloud CLI** | Latest | GCP authentication and management |
+| **kubectl** | ≥ 1.24 | Kubernetes cluster access |
+| **Helm** | ≥ 3.12 | Chart deployment (implicit via Terraform) |
 
-1. **Terraform**: Version 1.0 or later installed.
-2. **Google Cloud CLI**: Installed and authenticated with `gcloud auth login` and `gcloud auth application-default login`.
-3. **Kubernetes Access**: `kubectl` configured with context for the target GKE cluster.
-4. **Permissions**: The authenticated user must have permissions to create GCS buckets, Service Accounts, and assign IAM roles (Storage Object Admin).
+### Required GCP Permissions
 
-## Installation & Configuration
+The authenticated user/service account must have:
 
-### 1. Clone the Repository
+- `roles/storage.admin` - Create and manage GCS buckets
+- `roles/iam.serviceAccountAdmin` - Create service accounts
+- `roles/iam.serviceAccountKeyAdmin` - Manage Workload Identity bindings
+- `roles/container.developer` - Access GKE clusters
 
-If you haven't already, clone the project repository to your local machine.
+### Authentication Setup
+
+```bash
+# Authenticate with GCP
+gcloud auth login
+gcloud auth application-default login
+
+# Verify authentication
+gcloud auth list
+
+# Configure kubectl
+gcloud container clusters get-credentials CLUSTER_NAME \
+  --region=CLUSTER_REGION \
+  --project=PROJECT_ID
+```
+
+## Installation
+
+> **Existing Installation?** If you already have an LGTM stack deployed and want to manage it with Terraform, see the [Adoption Guide](adopting-lgtm-stack.md) before proceeding. The adoption process imports existing resources to avoid recreation and potential data loss.
+
+### Step 1: Clone Repository
 
 ```bash
 git clone https://github.com/Adorsys-gis/observability.git
 cd observability/lgtm-stack/terraform
 ```
 
-### 2. Configure Variables
-
-Copy the template to create your configuration file:
+### Step 2: Configure Variables
 
 ```bash
 cp terraform.tfvars.template terraform.tfvars
 ```
 
-Edit `terraform.tfvars` to define your environment-specific values.
+Edit `terraform.tfvars` with your environment values:
 
-| Variable | Description | Required | Default |
-| :--- | :--- | :---: | :--- |
-| `project_id` | Google Cloud Project ID | Yes | - |
-| `region` | GCP Region for resources | No | `us-central1` |
-| `cluster_name` | Name of the target GKE cluster | Yes | - |
-| `cluster_location` | Location of the GKE cluster | Yes | - |
-| `environment` | Environment label | No | `production` |
-| `monitoring_domain` | Base domain for monitoring services | Yes | - |
-| `letsencrypt_email` | Email for ACME registration | Yes | - |
-| `namespace` | Kubernetes namespace for stack | No | `lgtm` |
-| `grafana_admin_password` | Grafana admin password | Yes | - |
+```hcl
+# Required Variables
+project_id        = "your-gcp-project-id"
+cluster_name      = "your-gke-cluster"
+cluster_location  = "us-central1"
+monitoring_domain = "monitoring.example.com"
+letsencrypt_email = "admin@example.com"
+grafana_admin_password = "secure-password-here"
 
-> **Note**: For all available variables, see `variables.tf`.
+# Optional: Disable if managed elsewhere
+install_cert_manager  = false
+install_nginx_ingress = false
 
-### 3. Initialize Terraform
+# Chart versions (customize as needed)
+loki_version       = "6.6.4"
+mimir_version      = "5.5.0"
+tempo_version      = "1.57.0"
+prometheus_version = "25.27.0"
+grafana_version    = "10.3.0"
+```
 
-Initialize the project to download required providers and modules.
+### Complete Variable Reference
+
+For all available variables and their descriptions, see [variables.tf](../lgtm-stack/terraform/variables.tf).
+
+| Variable | Description | Default | Required |
+|----------|-------------|---------|----------|
+| `project_id` | GCP project ID | - | ✓ |
+| `region` | GCP region for resources | `us-central1` | |
+| `cluster_name` | GKE cluster name | - | ✓ |
+| `cluster_location` | GKE cluster location | - | ✓ |
+| `namespace` | Kubernetes namespace | `observability` | |
+| `monitoring_domain` | Base domain for services | - | ✓ |
+| `letsencrypt_email` | Let's Encrypt registration email | - | ✓ |
+| `grafana_admin_password` | Grafana admin password | - | ✓ |
+| `install_cert_manager` | Deploy cert-manager | `false` | |
+| `install_nginx_ingress` | Deploy NGINX ingress | `false` | |
+| `loki_schema_from_date` | Loki schema effective date | `2024-01-01` | |
+
+### Step 3: Initialize Terraform
 
 ```bash
 terraform init
 ```
 
-### 4. Plan Deployment
-
-Generate an execution plan to verify the resources that will be created.
+### Step 4: Plan Deployment
 
 ```bash
 terraform plan
 ```
 
-### 5. Apply Configuration
+Review the planned changes carefully before applying.
 
-Execute the plan to provision infrastructure and deploy the application stack.
+### Step 5: Apply Configuration
 
 ```bash
 terraform apply
 ```
 
+Type `yes` when prompted to confirm.
+
+**Expected deployment time**: 5-10 minutes depending on cluster size and component configuration.
+
+> **Warning**: If you see errors about resources already existing (GCS buckets, service accounts, Helm releases), **STOP** and follow the [Adoption Guide](adopting-lgtm-stack.md) to import existing resources instead of recreating them.
+
 ## Verification
 
-### Service Status
-
-Verify that all pods are running successfully in the `<NAMESPACE>` (default: `observability`) namespace.
+### Check Pod Status
 
 ```bash
-kubectl get pods -n <NAMESPACE>
+kubectl get pods -n observability
 ```
 
-![Kubectl Get Pods](img/kubectl-get-pods.png)
+All pods should be in `Running` state with `READY` showing expected replicas.
 
-### Public Endpoints
+![Kubectl Pods Output](img/kubectl-get-pods.png)
 
-The stack exposes the following endpoints for data ingestion and visualization. Replace `<monitoring_domain>` with your configured domain (e.g., `stack.observe.camer.digital`).
+### Service Endpoints
 
-| Service | Endpoint URL | Purpose | Method | Notes |
-| :--- | :--- | :--- | :--- | :--- |
-| **Grafana** | `https://grafana.<monitoring_domain>` | **Visualization** | GET | Main UI for dashboards and alerts. |
-| **Loki** | `https://loki.<monitoring_domain>/loki/api/v1/push` | **Logs Ingestion** | POST | Send logs via HTTP (JSON/Snappy). |
-| **Mimir** | `https://mimir.<monitoring_domain>/prometheus/api/v1/push` | **Metrics Ingestion** | POST | Send metrics via Prometheus Remote Write. |
-| **Tempo** (HTTP) | `https://tempo-push.<monitoring_domain>/v1/traces` | **Traces Ingestion** | POST | Send traces via OTLP HTTP. |
-| **Tempo** (gRPC) | `tempo-grpc.<monitoring_domain>:443` | **Traces Ingestion** | gRPC | Send traces via OTLP gRPC. |
+After deployment, the following endpoints are available:
 
-### Manual Verification
+| Service | Endpoint | Purpose | Protocol |
+|---------|----------|---------|----------|
+| **Grafana** | `https://grafana.<monitoring_domain>` | Visualization dashboard | HTTPS |
+| **Loki** | `https://loki.<monitoring_domain>/loki/api/v1/push` | Log ingestion | HTTP POST |
+| **Mimir** | `https://mimir.<monitoring_domain>/prometheus/api/v1/push` | Metrics ingestion (Remote Write) | HTTP POST |
+| **Tempo** (HTTP) | `https://tempo-push.<monitoring_domain>/v1/traces` | Trace ingestion (OTLP HTTP) | HTTP POST |
+| **Tempo** (gRPC) | `tempo-grpc.<monitoring_domain>:443` | Trace ingestion (OTLP gRPC) | gRPC |
+| **Prometheus** | `https://prometheus.<monitoring_domain>` | Metrics query interface | HTTPS |
 
-You can verify the Write Path (Ingestion) by sending synthetic data to the exposed endpoints.
+### Test Connectivity
 
-**Example Verification (Mimir Connectivity):**
+#### Verify Mimir Query API
 
 ```bash
-curl -v -G "https://mimir.<monitoring_domain>/prometheus/api/v1/query" \
+curl -G "https://mimir.<monitoring_domain>/prometheus/api/v1/query" \
   --data-urlencode 'query=up'
 ```
 
-**Example Verification (Loki Push):**
+Expected response: JSON with query results.
+
+#### Verify Loki Ingestion
 
 ```bash
-# Set timestamp to avoid shell quoting issues
-TS=$(date +%s)000000000
-curl -v -H "Content-Type: application/json" -XPOST \
-  "https://loki.<monitoring_domain>/loki/api/v1/push" \
-  --data-raw "{\"streams\": [{ \"stream\": { \"test\": \"manual_curl\" }, \"values\": [ [ \"$TS\", \"manual_test_log\" ] ] }]}"
+TIMESTAMP=$(date +%s)000000000
+curl -H "Content-Type: application/json" \
+  -XPOST "https://loki.<monitoring_domain>/loki/api/v1/push" \
+  --data-raw "{\"streams\":[{\"stream\":{\"job\":\"test\"},\"values\":[[\"$TIMESTAMP\",\"test log entry\"]]}]}"
 ```
 
-### Useful API Documentation
+Expected response: HTTP 204 No Content.
 
-For advanced usage, refer to the official API documentation:
+### Access Grafana
 
-- **Loki**: [Push API (Protobuf/JSON)](https://grafana.com/docs/loki/latest/reference/api/#push-log-entries-to-loki)
-- **Mimir**: [Prometheus Remote Write API](https://grafana.com/docs/mimir/latest/references/http-api/#remote-write)
-- **Tempo**: [OTLP HTTP API](https://grafana.com/docs/tempo/latest/configuration/?pg=docs-tempo-latest-api-otlp-http#otlp)
-
-### Dashboard Access
-
-Access the Grafana dashboard using the domain configured in `monitoring_domain`.
-
-- **URL**: `https://grafana.<monitoring_domain>`
-- **Username**: `admin`
-- **Password**: *<grafana_admin_password>*
+1. Navigate to `https://grafana.<monitoring_domain>`
+2. Login with:
+   - **Username**: `admin`
+   - **Password**: Value from `grafana_admin_password`
 
 ![Grafana Dashboard](img/grafana-dashboard.png)
 
-## Maintenance
+### Verify Datasources
 
-### Upgrades
+In Grafana, navigate to **Connections** > **Data Sources** and verify:
 
-To upgrade components, update the version variables in `terraform.tfvars` or `variables.tf` and re-run `terraform apply`.
+- **Loki** - Connected
+- **Mimir** - Connected  
+- **Tempo** - Connected
 
-> **Note**: The current stack uses **Loki v6.20.0**. Major version upgrades should be tested in a staging environment first to ensure compatibility with the storage schema.
+## Operations
 
-### Uninstallation
+### Upgrade Components
 
-To remove all resources created by this module:
+Update chart versions in `terraform.tfvars`:
+
+```hcl
+loki_version = "6.20.0"  # Updated version
+```
+
+Apply changes:
+
+```bash
+terraform apply
+```
+
+**Important**: Test major version upgrades in a non-production environment first, especially for Loki schema changes.
+
+### View Component Logs
+
+```bash
+# Loki logs
+kubectl logs -n observability -l app.kubernetes.io/name=loki --tail=100
+
+# Mimir logs
+kubectl logs -n observability -l app.kubernetes.io/name=mimir --tail=100
+
+# Grafana logs
+kubectl logs -n observability -l app.kubernetes.io/name=grafana --tail=100
+```
+
+### Scale Components
+
+Edit Helm values files in `values/` directory, then apply:
+
+```bash
+terraform apply
+```
+
+### Uninstall
 
 ```bash
 terraform destroy
 ```
 
-> **Warning**: Google Cloud Storage buckets containing observability data have `force_destroy` set to `false` to prevent accidental data loss. If you intend to delete the data, you must empty the buckets manually before running destroy.
+**Warning**: GCS buckets have `force_destroy = false` by default. Empty buckets manually if you want to delete data:
+
+```bash
+gcloud storage rm -r gs://PROJECT_ID-loki-chunks/**
+gcloud storage rm -r gs://PROJECT_ID-mimir-blocks/**
+gcloud storage rm -r gs://PROJECT_ID-tempo-traces/**
+```
 
 ## Troubleshooting
 
-### Terraform State Locks
+### Terraform State Lock
+
 ```bash
-# Fix: Unlock state if sure no other process is running
+# Check for running Terraform processes
+ps aux | grep terraform
+
+# Force unlock (only if no other process is running)
 terraform force-unlock <LOCK_ID>
 ```
 
-### Provider Authentication Errors
+### Authentication Errors
+
 ```bash
-# Fix: Re-authenticate with GCP
+# Re-authenticate with GCP
 gcloud auth application-default login
+
+# Verify credentials
+gcloud auth application-default print-access-token
 ```
 
-### Pods Pending (Resources)
+### Pods Stuck in Pending
+
 ```bash
-# Check for InsufficientCpu/Memory events
-kubectl describe pod <pod-name>
+# Check pod events
+kubectl describe pod <pod-name> -n observability
 
-# Fix: Enable GKE Autoscaling or resize node pool
+# Common causes:
+# - Insufficient CPU/memory
+# - Unbound PersistentVolumeClaims
+# - Node selector constraints
+
+# Check node resources
+kubectl top nodes
 ```
 
+### GCS Permission Errors
+
+```bash
+# Verify Workload Identity binding
+kubectl get sa observability-sa -n observability -o yaml | grep iam.gke.io
+
+# Check GCP IAM policy
+gcloud iam service-accounts get-iam-policy \
+  gke-observability-sa@PROJECT_ID.iam.gserviceaccount.com
+```
+
+For detailed troubleshooting, see [Troubleshooting Guide](troubleshooting-lgtm-stack.md).
+
+## API Documentation
+
+- **Loki Push API**: [grafana.com/docs/loki/latest/reference/api](https://grafana.com/docs/loki/latest/reference/api/#push-log-entries-to-loki)
+- **Mimir Remote Write**: [grafana.com/docs/mimir/latest/references/http-api](https://grafana.com/docs/mimir/latest/references/http-api/#remote-write)
+- **Tempo OTLP**: [grafana.com/docs/tempo/latest/api_docs](https://grafana.com/docs/tempo/latest/api_docs/)
+- **Prometheus API**: [prometheus.io/docs/prometheus/latest/querying/api](https://prometheus.io/docs/prometheus/latest/querying/api/)
+
+## Additional Resources
+
+- [Adoption Guide](adopting-lgtm-stack.md) - Import existing installations into Terraform
+- [Alloy Configuration Guide](alloy-config.md)

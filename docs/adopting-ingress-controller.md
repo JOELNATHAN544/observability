@@ -1,52 +1,46 @@
-# Adopting Existing Ingress Controller Installation
+# Adopting Existing NGINX Ingress Controller Installation
 
 This guide walks you through adopting an existing NGINX Ingress Controller installation into Terraform management.
 
 ## Prerequisites
 
-- Existing NGINX Ingress Controller
-- Terraform >= 1.0
-- `kubectl` and `helm` CLI installed
-
----
+- Existing NGINX Ingress Controller installation in your cluster
+- Terraform ≥ 1.0
+- `kubectl` configured for your cluster
+- `helm` CLI installed
 
 ## Step 1: Discover Existing Installation
 
-Run these commands to gather information about your current setup.
-
-### 1. Helm Release Status
+Run these commands to gather information about your current NGINX Ingress Controller setup:
 
 ```bash
+# 1. Find the Helm release
 helm list -A | grep ingress
 
-# Expected Output:
-# NAME           NAMESPACE      REVISION  STATUS    CHART                 APP_VERSION
-# ingress-nginx  ingress-nginx  1         deployed  ingress-nginx-4.14.1  1.14.1
-```
+# Expected output format:
+# RELEASE_NAME         NAMESPACE       REVISION  UPDATED                   STATUS    CHART                    APP_VERSION
+# nginx-monitoring     ingress-nginx   1         2025-12-08 11:23:11...    deployed  ingress-nginx-4.14.1     1.11.3
 
-### 2. Ingress Class
+# 2. Check the namespace
+kubectl get ns | grep ingress
 
-Check the name of your Ingress Class.
-
-```bash
+# 3. Verify IngressClass
 kubectl get ingressclass
 
-# Expected Output:
-# NAME   CONTROLLER             PARAMETERS   AGE
-# nginx  k8s.io/ingress-nginx   <none>       30d
-```
+# Expected output:
+# NAME    CONTROLLER             PARAMETERS   AGE
+# nginx   k8s.io/ingress-nginx   <none>       30d
 
-### 3. LoadBalancer Service
-
-```bash
-kubectl get svc -n ingress-nginx ingress-nginx-controller
+# 4. Check LoadBalancer service
+kubectl get svc -n ingress-nginx
 ```
 
 **Record these values**:
-- Release Name (e.g., `ingress-nginx`)
+- Release name (e.g., `nginx-monitoring`)
 - Namespace (e.g., `ingress-nginx`)
-- Chart Version (e.g., `4.14.1`)
-- IngressClass Name (e.g., `nginx`)
+- Chart version (e.g., `4.14.1`)
+- IngressClass name (e.g., `nginx`)
+- Number of controller replicas
 
 ---
 
@@ -58,7 +52,6 @@ Navigate to the Terraform directory:
 cd ingress-controller/terraform
 ```
 
-> [!IMPORTANT]
 > **Critical**: You MUST set `install_nginx_ingress = true` to create the Terraform resource configuration before importing.
 
 Copy the template:
@@ -67,17 +60,22 @@ Copy the template:
 cp terraform.tfvars.template terraform.tfvars
 ```
 
-Update `terraform.tfvars`:
+Create or update `terraform.tfvars` with values matching your cluster:
 
 ```hcl
-# Enable the module
+# Enable the module (required for import)
 install_nginx_ingress = true
 
 # Match your existing installation
-nginx_ingress_version      = "4.14.1"         # Update to match helm list
-nginx_ingress_namespace    = "ingress-nginx"
-nginx_ingress_release_name = "ingress-nginx"
-ingress_class_name         = "nginx"
+nginx_ingress_version = "4.14.1"        # From helm list
+namespace             = "ingress-nginx"  # From helm list
+release_name          = "ingress-nginx"  # From helm list (adjust if different)
+
+# IngressClass configuration
+ingress_class_name = "nginx"             # From kubectl get ingressclass
+
+# Match current replica count
+replica_count = 1  # Adjust based on your deployment
 ```
 
 ---
@@ -90,16 +88,40 @@ terraform init
 
 ---
 
-## Step 4: Import Resources
-
-You must import the Helm Release.
-
-### 1. Import Helm Release
-
-Format: `<namespace>/<release_name>`
+## Step 4: Import the Helm Release
 
 ```bash
-terraform import 'helm_release.nginx_ingress[0]' ingress-nginx/ingress-nginx
+# Format: terraform import <resource_address> <namespace>/<release_name>
+terraform import 'helm_release.nginx_ingress[0]' ingress-nginx/nginx-monitoring
+```
+
+**Expected output**:
+```
+helm_release.nginx_ingress[0]: Importing from ID "ingress-nginx/nginx-monitoring"...
+helm_release.nginx_ingress[0]: Import prepared!
+  Prepared helm_release for import
+helm_release.nginx_ingress[0]: Refreshing state... [id=nginx-monitoring]
+
+Import successful!
+```
+
+### Troubleshooting Import
+
+**Error: "Kubernetes cluster unreachable"**
+
+**Fix**: Export kubeconfig path:
+```bash
+export KUBE_CONFIG_PATH=~/.kube/config
+terraform import 'helm_release.nginx_ingress[0]' ingress-nginx/nginx-monitoring
+```
+
+**Error: "Configuration for import target does not exist"**
+
+**Fix**: Ensure `install_nginx_ingress = true` in `terraform.tfvars`:
+```bash
+# Set install_nginx_ingress = true
+terraform plan  # Creates resource config
+terraform import 'helm_release.nginx_ingress[0]' ingress-nginx/nginx-monitoring
 ```
 
 ---
@@ -112,20 +134,192 @@ terraform plan
 
 **Expected output**: Should show **no changes** or only minor metadata updates.
 
-> [!WARNING]
-> If you see changes to `spec.controller` for the IngressClass, **DO NOT APPLY**. This field is immutable. Ensure your `ingress_class_name` matches the existing one.
+**Acceptable changes**:
+- Addition of Terraform-managed labels/annotations
+- Default values being set explicitly
+
+**Red flags** (review carefully):
+- Changes to replica count
+- Changes to IngressClass name
+- Changes to LoadBalancer service type
+- Resource requests/limits modifications
+
+If you see major changes, **STOP** and review your `terraform.tfvars` values against the current deployment.
 
 ---
 
 ## Common Issues
 
-### Error: "IngressClass field is immutable"
-**Cause**: Terraform is trying to change the `controller` field (e.g., from `k8s.io/nginx` to `k8s.io/ingress-nginx`).
-**Fix**: Update `ingress_class_name` or manually delete the IngressClass to let Terraform recreate it.
+### Error: "Release already exists"
+
+**Cause**: The Helm release name conflicts with an existing release.
+
+**Fix**: Import the existing release (Step 4) or use a different release name.
+
+---
+
+### Error: "IngressClass conflicts"
+
+**Symptoms**: Terraform wants to modify or recreate the IngressClass.
+
+**Diagnosis**:
+```bash
+# Check current IngressClass
+kubectl get ingressclass -o yaml
+
+# Verify IngressClass name matches
+kubectl get ingressclass nginx -o jsonpath='{.metadata.name}'
+```
+
+**Fix**: Ensure `ingress_class_name` in `terraform.tfvars` matches exactly:
+```hcl
+ingress_class_name = "nginx"  # Must match existing IngressClass
+```
+
+---
+
+### Error: "Namespace annotation mismatch"
+
+**Symptoms**: Terraform detects namespace ownership conflicts.
+
+**Diagnosis**:
+```bash
+# Check namespace annotations
+kubectl get namespace ingress-nginx -o yaml | grep -A 5 "annotations:"
+```
+
+**Fix**: Usually safe to ignore if only Helm metadata annotations differ. If Terraform wants to recreate the namespace, consider managing it separately.
+
+---
+
+### Drift Detection After Import
+
+**Issue**: `terraform plan` shows changes after successful import.
+
+**Common causes**:
+
+1. **Replica count mismatch**:
+```bash
+# Check current replicas
+kubectl get deployment -n ingress-nginx
+
+# Update terraform.tfvars
+replica_count = <current_count>
+```
+
+2. **Chart version mismatch**:
+```bash
+# Verify chart version
+helm list -n ingress-nginx
+
+# Update terraform.tfvars
+nginx_ingress_version = "<actual_version>"
+```
+
+3. **Resource limits not set**:
+If your current deployment has custom resource limits, add them to a custom values file or variables.
+
+---
+
+## Advanced: Importing Multiple Resources
+
+If you have multiple Ingress Controllers (e.g., internal and external):
+
+```bash
+# Import first controller
+terraform import 'helm_release.nginx_ingress[0]' ingress-nginx/nginx-monitoring
+
+# Import second controller (requires module modification)
+terraform import 'helm_release.nginx_ingress_internal[0]' ingress-nginx-internal/nginx-internal
+```
+
+**Note**: This requires modifying your Terraform configuration to support multiple instances.
+
+---
+
+## Post-Import Best Practices
+
+### 1. Test in Non-Production First
+
+Before adopting production Ingress Controllers:
+- Test the adoption process in staging/dev
+- Verify `terraform plan` shows no destructive changes
+- Ensure DNS and traffic routing remain functional
+
+### 2. Backup Current Configuration
+
+```bash
+# Backup Helm values
+helm get values nginx-monitoring -n ingress-nginx > backup-helm-values.yaml
+
+# Backup Kubernetes resources
+kubectl get all,ingress,ingressclass -n ingress-nginx -o yaml > backup-k8s-resources.yaml
+```
+
+### 3. Monitor After Adoption
+
+```bash
+# Watch pod status
+kubectl get pods -n ingress-nginx -w
+
+# Monitor LoadBalancer service
+kubectl get svc -n ingress-nginx -w
+
+# Check ingress resources
+kubectl get ingress -A
+```
+
+---
+
+## Rollback Plan
+
+If adoption causes issues:
+
+1. **Remove from Terraform state**:
+```bash
+terraform state rm 'helm_release.nginx_ingress[0]'
+```
+
+2. **Restore Helm management** (if needed):
+```bash
+# Helm will detect existing release and resume management
+helm upgrade nginx-monitoring ingress-nginx/ingress-nginx -n ingress-nginx
+```
+
+---
+
+## Import Script
+
+For convenience, here's a complete import script:
+
+```bash
+#!/bin/bash
+set -e
+
+NAMESPACE="ingress-nginx"
+RELEASE_NAME="nginx-monitoring"
+
+echo "Verifying existing installation..."
+helm list -n ${NAMESPACE} | grep ${RELEASE_NAME}
+
+echo "Importing Helm release into Terraform..."
+terraform import "helm_release.nginx_ingress[0]" "${NAMESPACE}/${RELEASE_NAME}"
+
+echo "Verifying import..."
+terraform plan
+
+echo "Success! Review the plan above before applying changes."
+```
+
+Save as `import-ingress.sh`, make executable (`chmod +x import-ingress.sh`), and run.
 
 ---
 
 ## Next Steps
 
-1. **Verify Routing**: Ensure existing Ingresses still work.
-2. **Backup**: Commit your `terraform.tfstate`.
+After successful adoption:
+
+1. **Commit State**: Backup your `terraform.tfstate` to secure remote storage
+2. **Document**: Update team runbooks with the adopted configuration
+3. **Monitor**: Run `terraform plan` regularly to detect configuration drift
+4. **Test Updates**: Try a minor version upgrade in non-production first

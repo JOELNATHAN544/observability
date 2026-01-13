@@ -1,23 +1,21 @@
 # Kubernetes Observability & Operations
 
-A modular infrastructure-as-code repository for provisioning observability and operations platforms on Kubernetes.
+Infrastructure-as-code repository for deploying production-grade observability and operations platforms on Kubernetes.
 
-## Core Platforms
+## Platforms
 
-- **[Observability (LGTM)](lgtm-stack/README.md)**  
-  Comprehensive monitoring, logging, and tracing stack powered by Grafana, Loki, Tempo, and Mimir.
+### [Observability Stack (LGTM)](lgtm-stack/README.md)
+Unified monitoring, logging, and tracing powered by Grafana, Loki, Tempo, and Mimir.
 
-- **[GitOps Delivery](argocd/README.md)**  
-  Declarative continuous delivery engine for managing cluster workloads and configurations.
+### [GitOps Delivery (ArgoCD)](argocd/README.md)
+Declarative continuous delivery for cluster workloads and configurations.
 
-## Cluster Infrastructure
+### [Certificate Management (cert-manager)](cert-manager/README.md)
+Automated TLS certificate provisioning and renewal via Let's Encrypt.
 
-- **[Certificate Management](cert-manager/README.md)**  
-  Automated TLS certificate issuance and renewal via Let's Encrypt.
+### [Ingress Controller (NGINX)](ingress-controller/README.md)
+External traffic routing and load balancing for cluster services.
 
-- **[Traffic Management](ingress-controller/README.md)**  
-  NGINX-based ingress controller for external traffic routing and load balancing.
+## Deployment
 
----
-
-
+Each platform supports both automated (Terraform) and manual (Helm) deployment. See individual component READMEs for detailed instructions.

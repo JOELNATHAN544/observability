@@ -7,7 +7,7 @@
 install_nginx_ingress = false
 
 # Helm Release
-release_name          = "ingress-nginx"
+release_name          = "nginx-monitoring"
 namespace             = "ingress-nginx"
 nginx_ingress_version = "4.14.1"
 
