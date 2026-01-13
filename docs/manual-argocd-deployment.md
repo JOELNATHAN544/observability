@@ -2,7 +2,6 @@
 
 Guide for manually deploying ArgoCD to Kubernetes using Helm with production-ready configurations including high availability, HTTPS ingress, and OIDC authentication.
 
-<<<<<<< HEAD
 ## Table of Contents
 
 - [Prerequisites](#prerequisites)
@@ -34,10 +33,8 @@ Before deploying Argo CD, ensure you have the following:
 - **OIDC Provider** (optional): For SSO authentication (e.g., Keycloak, Okta, Google)
 
 ---
-=======
 **Official Documentation**: [argo-cd.readthedocs.io](https://argo-cd.readthedocs.io/)  
 **GitHub Repository**: [argoproj/argo-cd](https://github.com/argoproj/argo-cd)
->>>>>>> 527f307c2f2174f321c632dd1ca42e273f95967c
 
 ## Overview
 
