@@ -1,33 +1,28 @@
-# Kubernetes Observability & Operations Platform
+# Kubernetes Observability & Operations
 
-This repository provisions a comprehensive, production-grade observability and operations platform on **Google Kubernetes Engine (GKE)**. It integrates distinct, modular components to handle **deployment**, **monitoring**, **logging**, **tracing**, and **certificate management**.
+Production-ready infrastructure-as-code for deploying enterprise observability and operational tooling on Google Kubernetes Engine (GKE). This repository provides modular, production-grade deployments where each component can be installed independently or as part of a complete observability and operations stack.
 
-## Core Components
+## Requirements
 
-*   **Observability (LGTM Stack)**:
-    *   **Loki**: Distributed logging.
-    *   **Grafana**: Visualization and dashboards.
-    *   **Tempo**: Distributed tracing.
-    *   **Mimir**: Scalable metrics (Prometheus storage).
-*   **GitOps (ArgoCD)**:
-    *   **ArgoCD**: Continuous delivery and declarative GitOps workflows.
-*   **Infrastructure Essentials**:
-    *   **Cert-Manager**: Automated TLS certificate issuance (Let's Encrypt).
-    *   **Ingress Controller**: NGINX Ingress for external traffic management.
+- [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine/docs/quickstart) cluster
+- [kubectl](https://kubernetes.io/docs/tasks/tools/) configured with cluster admin access
+- [Helm 3.8+](https://helm.sh/docs/intro/install/) (for manual deployments)
+- [Terraform 1.3+](https://developer.hashicorp.com/terraform/install) (for automated deployments)
 
-## Project Structure
+## Architecture
 
-This project is built with **Terraform** and **Helm**, designed for modularity. You can deploy the entire stack or individual components as needed.
+This repository follows a modular architecture where components maintain operational independence while integrating seamlessly. Deploy individual components as needed or provision the complete stack for full observability coverage.
 
-*   **[`lgtm-stack/`](lgtm-stack/README.md)**: The core internal monitoring platform.
-*   **[`argocd/`](argocd/README.md)**: The GitOps delivery engine.
-*   **[`cert-manager/`](cert-manager/README.md)**: Certificate management infrastructure.
-*   **[`ingress-controller/`](ingress-controller/README.md)**: Ingress routing infrastructure.
+## Components
 
-## Documentation
+### [LGTM Observability Stack](lgtm-stack/README.md)
+Comprehensive monitoring, logging, and distributed tracing platform built on Grafana Labs' open-source stack (Loki, Grafana, Tempo, Mimir).
 
-*   **[Kubernetes Observability Guide](docs/kubernetes-observability.md)**: Deployment and architecture of the LGTM stack.
-*   **[Cert-Manager Deployment](docs/cert-manager-terraform-deployment.md)**: Terraform guide for Cert-Manager.
-*   **[Ingress Controller Deployment](docs/ingress-controller-terraform-deployment.md)**: Terraform guide for NGINX Ingress.
-*   **[ArgoCD Documentation](argocd/README.md)**: Setup and configuration for GitOps.
+### [ArgoCD GitOps Engine](argocd/README.md)
+Declarative continuous delivery system for managing Kubernetes applications and configurations through Git-based workflows.
 
+### [cert-manager Certificate Authority](cert-manager/README.md)
+Automated X.509 certificate lifecycle management with native support for ACME providers including Let's Encrypt.
+
+### [NGINX Ingress Controller](ingress-controller/README.md)
+Layer 7 load balancer and reverse proxy for routing external HTTP/HTTPS traffic to cluster services.

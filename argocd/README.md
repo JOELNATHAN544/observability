@@ -1,24 +1,35 @@
-# Argo CD Deployment Guide
+# ArgoCD GitOps Platform
 
-Argo CD is a declarative, GitOps continuous delivery tool for Kubernetes. It automates the deployment of applications by continuously monitoring Git repositories and synchronizing the desired application state with the live state in your Kubernetes cluster.
+Declarative GitOps continuous delivery for Kubernetes applications and configurations.
 
-## Deployment Options
+**Official Documentation**: [argo-cd.readthedocs.io](https://argo-cd.readthedocs.io/)  
+**GitHub Repository**: [argoproj/argo-cd](https://github.com/argoproj/argo-cd)
 
-We provide two ways to deploy Argo CD to your Kubernetes cluster:
+## Features
 
-### 1. Manual Deployment
+- **GitOps Workflow**: Application deployment from Git as single source of truth
+- **Automated Sync**: Continuous reconciliation of desired state with cluster state
+- **Multi-Cluster Management**: Deploy and manage applications across multiple clusters
+- **RBAC & SSO**: Keycloak integration for authentication and role-based access control
+- **Application Health**: Real-time monitoring of deployment status and resource health
 
-Deploy Argo CD manually using Helm with customizable values files. This approach gives you full control over the configurations.
+## Deployment
 
-**[Manual Deployment Guide](../docs/manual-argocd-deployment.md)**
+### Automated (Terraform)
+Recommended approach with infrastructure-as-code management.
 
-The manual deployment uses the production-ready values file located at [`argocd/manual/argocd-prod-values.yaml`](manual/argocd-prod-values.yaml).
+See [Terraform deployment guide](../docs/argocd-terraform-deployment.md)
 
-### 2. Automated Deployment (Terraform)
+### Manual (Helm)
+Uses production-ready values at [`manual/argocd-prod-values.yaml`](manual/argocd-prod-values.yaml)
 
-Deploy Argo CD automatically using Terraform for infrastructure-as-code management
+See [Manual deployment guide](../docs/manual-argocd-deployment.md)
 
-**[Automated Deployment Guide](#)** *(Coming soon)*
+## Operations
 
-The automated deployment is located in the [`argocd/terraform/`](terraform) directory.
+- **Adopting Existing Installation**: [Adoption guide](../docs/adopting-argocd.md)
+- **Troubleshooting**: [Troubleshooting guide](../docs/troubleshooting-argocd.md)
 
+## Access
+
+After deployment, ArgoCD UI is available at the configured ingress hostname with SSO authentication via Keycloak.

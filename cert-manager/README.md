@@ -1,48 +1,31 @@
-# Cert-Manager Deployment
+# Cert-Manager Certificate Automation
 
-This directory contains infrastructure-as-code and configuration for deploying **Cert-Manager** to automate the management and issuance of TLS certificates for the Kubernetes cluster.
+Automated TLS certificate management and issuance for Kubernetes workloads.
 
-Cert-Manager provides:
-*   **Automated Issuance**: Obtaining certificates from Let's Encrypt and other issuers.
-*   **Renewal**: Automatically renewing certificates before expiry.
-*   **Integration**: Working seamlessly with Ingress resources to secure external access for any application.
+**Official Documentation**: [cert-manager.io/docs](https://cert-manager.io/docs/)  
+**GitHub Repository**: [cert-manager/cert-manager](https://github.com/cert-manager/cert-manager)
 
-## Deployment Options
+## Features
 
-### 1. Automated Deployment
-This method uses the Terraform configuration located in the `terraform/` directory. It is the recommended approach for automation.
+- **Automated Issuance**: Certificate provisioning from Let's Encrypt and other ACME providers
+- **Automatic Renewal**: Certificates renewed before expiration with zero downtime
+- **Ingress Integration**: Seamless TLS termination for Ingress resources
+- **Multiple Issuers**: Support for production and staging Let's Encrypt environments
 
-For detailed instructions, see the [Terraform deployment guide](../docs/cert-manager-terraform-deployment.md).
+## Deployment
 
-### 2. Manual (Helm & Kubectl)
-If you prefer to deploy manually using CLI tools, you can follow the [manual deployment guide](../docs/cert-manager-manual-deployment.md).
+### Automated (Terraform)
+Recommended approach with infrastructure-as-code management.
 
-## Troubleshooting
+See [Terraform deployment guide](../docs/cert-manager-terraform-deployment.md)
 
-### Deployment Flags
-Ensure variables are set correctly in `terraform.tfvars`:
-```hcl
-install_cert_manager = true
-```
+### Manual (Helm & kubectl)
+Command-line deployment with manual configuration.
 
-### Common Issues
+See [Manual deployment guide](../docs/cert-manager-manual-deployment.md)
 
-**Webhook Pod Not Ready**
-```bash
-# Check pod status (look for CrashLoopBackOff)
-kubectl get pods -n cert-manager
+## Operations
 
-# Fix: Ensure installCRDs=true is set in Helm release
-```
+- **Adopting Existing Installation**: [Adoption guide](../docs/adopting-cert-manager.md)
+- **Troubleshooting**: [Troubleshooting guide](../docs/troubleshooting-cert-manager.md)
 
-**Certificate Stuck in "False" State**
-```bash
-# Check certificate events for challenge failures
-kubectl describe certificate <name> -n <namespace>
-```
-
-**Issuer Not Ready**
-```bash
-# Check issuer status and ACME server URL
-kubectl describe clusterissuer letsencrypt-prod
-```

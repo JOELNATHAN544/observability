@@ -1,50 +1,35 @@
-# NGINX Ingress Deployment
+# NGINX Ingress Controller
 
-This directory contains infrastructure-as-code and configuration for deploying the **NGINX Ingress Controller** to manage external access for services running on the cluster.
+External traffic management and load balancing for Kubernetes services.
 
-The Ingress Controller provides:
-*   **Load Balancing**: Routing external traffic to internal Kubernetes services.
-*   **SSL Termination**: Handling HTTPS connections (integrated with Cert-Manager).
-*   **Path-based Routing**: Directing traffic to applications based on hostnames or paths.
+**Official Documentation**: [kubernetes.github.io/ingress-nginx](https://kubernetes.github.io/ingress-nginx/)  
+**GitHub Repository**: [kubernetes/ingress-nginx](https://github.com/kubernetes/ingress-nginx)
 
-## Deployment Options
+## Features
 
-### 1. Automated Deployment
-This method uses the Terraform configuration located in the `terraform/` directory.
+- **Load Balancing**: Intelligent traffic distribution to backend services
+- **SSL/TLS Termination**: HTTPS handling with cert-manager integration
+- **Path-Based Routing**: Request routing based on hostnames and URL paths
+- **WebSocket Support**: Real-time bidirectional communication
+- **Rate Limiting**: Request throttling and DDoS protection
 
-For detailed instructions, see the [Terraform deployment guide](../docs/ingress-controller-terraform-deployment.md).
+## Deployment
 
-### 2. Manual (Helm)
-If you prefer to deploy manually using Helm, you can follow the [manual deployment guide](../docs/ingress-controller-manual-deployment.md).
+### Automated (Terraform)
+Recommended approach with infrastructure-as-code management.
 
-## Troubleshooting
+See [Terraform deployment guide](../docs/ingress-controller-terraform-deployment.md)
 
-### Deployment Flags
-Ensure variables are set correctly in `terraform.tfvars`:
-```hcl
-install_nginx_ingress = true
-```
+### Manual (Helm)
+Command-line deployment with manual configuration.
 
-### Common Issues
+See [Manual deployment guide](../docs/ingress-controller-manual-deployment.md)
 
-**LoadBalancer External IP Pending**
-```bash
-# Check service status for EXTERNAL-IP
-kubectl get svc -n ingress-nginx
+## Operations
 
-# Fix: Verify GCP LoadBalancer quota or cloud-controller logs
-```
+- **Adopting Existing Installation**: [Adoption guide](../docs/adopting-ingress-controller.md)
+- **Troubleshooting**: [Troubleshooting guide](../docs/troubleshooting-ingress-controller.md)
 
-**404 Not Found**
-```bash
-# Verify Ingress resource points to valid Service/Port
-kubectl describe ingress <name> -n <namespace>
+## Service Exposure
 
-# Fix: Ensure Ingress Class is set to 'nginx'
-```
-
-**SSL Certificate Issues**
-```bash
-# Check secret name in TLS section matches Cert-Manager secret
-kubectl describe ingress <name> -n <namespace>
-```
+The controller provisions a LoadBalancer service that serves as the cluster's external entry point for HTTP/HTTPS traffic.
