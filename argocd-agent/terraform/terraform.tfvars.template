@@ -1,0 +1,121 @@
+# =============================================================================
+# ARGOCD HUB-AND-SPOKE ARCHITECTURE - CONFIGURATION TEMPLATE
+# Copy this file to terraform.tfvars and customize for your environment
+# =============================================================================
+
+# =============================================================================
+# DEPLOYMENT MODE
+# =============================================================================
+
+# Set which components to deploy
+deploy_hub = true    # Deploy Hub (control plane)
+deploy_spoke = true  # Deploy Spoke (workload cluster)
+
+# =============================================================================
+# HUB CLUSTER CONFIGURATION
+# =============================================================================
+
+# Kubernetes context for Hub cluster (run: kubectl config get-contexts)
+hub_cluster_context = "gke_project-id_region_hub-cluster-name"
+
+# Namespace for ArgoCD on Hub
+hub_namespace = "argocd"
+
+# Public URL for ArgoCD UI
+hub_argocd_url = "https://argocd.example.com"
+
+# Hostname for Agent Principal gRPC endpoint (must be accessible from Spoke)
+hub_principal_host = "agent-principal.example.com"
+
+# Kubeconfig path (optional, defaults to ~/.kube/config)
+# hub_kubeconfig_path = "~/.kube/config"
+
+# =============================================================================
+# SPOKE CLUSTER CONFIGURATION
+# =============================================================================
+
+# Kubernetes context for Spoke cluster
+spoke_cluster_context = "gke_project-id_region_spoke-cluster-name"
+
+# Unique identifier for this spoke
+spoke_id = "spoke-01"
+
+# Namespace for ArgoCD on Spoke
+spoke_namespace = "argocd"
+
+# Management namespace on Hub (optional, defaults to <spoke_id>-mgmt)
+# spoke_mgmt_namespace = "spoke-01-mgmt"
+
+# Kubeconfig path (optional)
+# spoke_kubeconfig_path = "~/.kube/config"
+
+# =============================================================================
+# ARGOCD VERSION
+# =============================================================================
+
+# ArgoCD Helm chart version
+argocd_version = "7.7.12"
+
+# ArgoCD container image tag
+argocd_image_tag = "v2.12.6"
+
+# =============================================================================
+# CERTIFICATE CONFIGURATION
+# =============================================================================
+
+# CA certificate settings
+ca_common_name = "ArgoCD Agent Hub CA"
+ca_organization = "MyOrganization"
+ca_validity_hours = 87600  # 10 years
+
+# Client certificate validity
+client_cert_validity_hours = 8760  # 1 year
+
+# =============================================================================
+# INTEGRATION WITH EXISTING MODULES
+# =============================================================================
+
+# Install cert-manager (set to false if already installed)
+install_cert_manager = true
+cert_manager_version = "v1.15.0"
+cert_manager_namespace = "cert-manager"
+
+# Install NGINX Ingress (set to false if already installed)
+install_nginx_ingress = true
+nginx_ingress_version = "4.10.1"
+nginx_ingress_namespace = "ingress-nginx"
+
+# Ingress class name
+ingress_class_name = "nginx"
+
+# Let's Encrypt configuration
+letsencrypt_email = "admin@example.com"
+cert_issuer_name = "letsencrypt-prod"
+cert_issuer_kind = "ClusterIssuer"
+
+# =============================================================================
+# KEYCLOAK SSO (Optional)
+# =============================================================================
+
+# Enable Keycloak SSO integration
+enable_keycloak_sso = false
+
+# Keycloak configuration (only needed if enable_keycloak_sso = true)
+# keycloak_url = "https://keycloak.example.com"
+# keycloak_user = "admin"
+# keycloak_password = "your-keycloak-password"
+# target_realm = "argocd"
+
+# =============================================================================
+# ADVANCED CONFIGURATION
+# =============================================================================
+
+# Redis HA (for production)
+enable_redis_ha = false
+redis_replica_count = 3
+
+# Agent Principal replicas
+principal_replica_count = 1
+
+# Agent replicas
+agent_replica_count = 1

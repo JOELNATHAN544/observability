@@ -21,6 +21,9 @@ Comprehensive monitoring, logging, and distributed tracing platform built on Gra
 ### [ArgoCD GitOps Engine](argocd/README.md)
 Declarative continuous delivery system for managing Kubernetes applications and configurations through Git-based workflows.
 
+### [ArgoCD Agent (Hub-and-Spoke)](argocd-agent/README.md)
+Production-grade multi-cluster GitOps with Argo CD Agent Managed Mode for centralized control plane with distributed spoke clusters.
+
 ### [cert-manager Certificate Authority](cert-manager/README.md)
 Automated X.509 certificate lifecycle management with native support for ACME providers including Let's Encrypt.
 
