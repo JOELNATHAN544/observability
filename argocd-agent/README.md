@@ -48,12 +48,12 @@ Production-grade multi-cluster GitOps with Argo CD Agent Managed Mode for centra
 ### Automated (Terraform)
 Recommended approach with full automation including PKI management.
 
-See [Terraform deployment guide](docs/argocd-agent-terraform-deployment.md)
+See [Terraform deployment guide](../docs/argocd-agent-terraform-deployment.md)
 
 ### Manual (Kustomize)
 For advanced users requiring customizations beyond Terraform capabilities.
 
-See [Manual deployment guide](docs/argocd-agent-manual-deployment.md)
+Use the scripts in `scripts/` directory for manual deployment.
 
 ## Deployment Modes
 
@@ -67,7 +67,16 @@ This module supports three deployment modes:
 
 ## Quick Start
 
-1. **Copy configuration template**:
+1. **Install Prerequisites**:
+   The `argocd-agentctl` binary is required for PKI operations.
+   ```bash
+   # Downloads and installs to /usr/local/bin (requires sudo)
+   ./scripts/install_agentctl.sh
+   # Verify
+   argocd-agentctl version
+   ```
+
+2. **Copy configuration template**:
    ```bash
    cd terraform
    cp terraform.tfvars.template terraform.tfvars
@@ -93,10 +102,11 @@ This module supports three deployment modes:
 
 ## Documentation
 
-- **[Architecture](docs/argocd-agent-architecture.md)**: Detailed architecture, diagrams, and patterns
-- **[Terraform Deployment](docs/argocd-agent-terraform-deployment.md)**: Step-by-step Terraform guide
-- **[PKI Management](docs/argocd-agent-pki-management.md)**: Certificate lifecycle and rotation
-- **[Troubleshooting](docs/argocd-agent-troubleshooting.md)**: Common issues and solutions
+- **[Architecture](../docs/argocd-agent-architecture.md)**: Detailed architecture, diagrams, and patterns
+- **[Terraform Deployment](../docs/argocd-agent-terraform-deployment.md)**: Step-by-step Terraform guide
+- **[PKI Management](../docs/argocd-agent-pki-management.md)**: Certificate lifecycle and rotation
+- **[Troubleshooting](../docs/argocd-agent-troubleshooting.md)**: Common issues and solutions
+- **[Adopting Existing Installation](../docs/adopting-argocd-agent.md)**: Import existing deployment to Terraform
 
 ## Requirements
 
@@ -104,7 +114,19 @@ This module supports three deployment modes:
 - Kubernetes clusters (Hub and/or Spoke)
 - kubectl configured with cluster contexts
 - Helm 3.8+ (automatically used by Terraform)
+- argocd-agentctl >= v0.5.3 (use provided script)
 - Network connectivity from Spoke to Hub (gRPC port 8443)
+
+## Important Considerations
+
+### Timeout Configuration
+The agent architecture requires longer timeout values than standard ArgoCD due to the resource-proxy layer adding latency. **The Terraform module automatically configures these timeouts:**
+
+- **Repository Server Timeout**: 300s (5 min) vs default 60s
+- **Reconciliation Timeout**: 600s (10 min) vs default 180s
+- **Connection Status Cache**: 1h for reduced API load
+
+These are essential for API discovery through the agent connection. See [deployment guide](../docs/argocd-agent-terraform-deployment.md#important-timeout-configuration) for details.
 
 ## Security Considerations
 
@@ -149,10 +171,10 @@ After deployment:
 
 ## Operations
 
-- **Certificate Rotation**: See [PKI Management Guide](docs/argocd-agent-pki-management.md)
+- **Certificate Rotation**: See [PKI Management Guide](../docs/argocd-agent-pki-management.md)
 - **Adding Spokes**: See scaling section above
 - **Monitoring**: Prometheus metrics exposed on Agent and Principal
-- **Troubleshooting**: See [Troubleshooting Guide](docs/argocd-agent-troubleshooting.md)
+- **Troubleshooting**: See [Troubleshooting Guide](../docs/argocd-agent-troubleshooting.md)
 
 ## Known Issues
 
@@ -163,7 +185,7 @@ After deployment:
 | Applications not syncing | Check Agent logs and RBAC permissions |
 | Certificate errors | Verify Hub CA and client cert distribution |
 
-See [Troubleshooting Guide](docs/argocd-agent-troubleshooting.md) for complete list.
+See [Troubleshooting Guide](../docs/argocd-agent-troubleshooting.md) for complete list.
 
 ## Contributing
 

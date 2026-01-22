@@ -130,6 +130,56 @@ kubectl --context=$SPOKE_CTX exec -n argocd deployment/argocd-agent -- \
 # Should show: ca.crt, tls.crt, tls.key
 ```
 
+## Important: Timeout Configuration
+
+**The Terraform module automatically configures timeout settings required for the agent architecture.**
+
+### Why Timeouts Matter
+
+The agent architecture introduces additional latency due to the resource-proxy layer:
+- API discovery requests travel: Application Controller → Resource-Proxy → Agent → Spoke Cluster
+- Responses return through the same multi-hop path
+- ArgoCD's default timeouts (60s repo server, 180s reconciliation) are insufficient
+
+### Automatic Configuration
+
+The Terraform module sets these timeouts automatically in `main.tf`:
+
+**argocd-cmd-params-cm:**
+```yaml
+controller.repo.server.timeout.seconds: "300"     # 5 minutes (vs 60s default)
+server.connection.status.cache.expiration: "1h"   # Cache cluster status longer
+```
+
+**argocd-cm:**
+```yaml
+timeout.reconciliation: "600s"        # 10 minutes (vs 180s default)
+timeout.hard.reconciliation: "0"       # No hard limit
+```
+
+### Symptoms Without Proper Timeouts
+
+If timeouts are not configured, you'll see:
+- Applications stuck in "Unknown/Unknown" status
+- Application controller logs showing: `failed to get api resources: the server was unable to return a response in the time allotted`
+- Resource-proxy connection errors
+
+### Verification
+
+After deployment, verify timeout settings:
+
+```bash
+# Check controller timeouts
+kubectl get configmap argocd-cmd-params-cm -n argocd -o yaml | grep timeout
+
+# Check reconciliation timeouts
+kubectl get configmap argocd-cm -n argocd -o yaml | grep timeout
+```
+
+See [Issue 9 in Troubleshooting Guide](argocd-agent-troubleshooting.md#issue-9-resource-proxy-api-discovery-timeouts) for manual configuration steps.
+
+---
+
 ## Step 5: Test End-to-End Flow
 
 ### Create Test Application on Hub

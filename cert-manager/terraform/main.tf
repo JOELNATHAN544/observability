@@ -27,8 +27,16 @@ resource "helm_release" "cert_manager" {
     value = "true"
   }
 
-  wait    = true
-  timeout = 600
+  set {
+    name  = "global.leaderElection.namespace"
+    value = var.namespace
+  }
+
+  wait              = true
+  wait_for_jobs     = true
+  timeout           = 900
+  atomic            = false
+  cleanup_on_fail   = false
 }
 
 # Issuer for Let's Encrypt

@@ -286,6 +286,87 @@ kubectl --context=$SPOKE_CTX get deployment -n argocd argocd-application-control
 
 ---
 
+### Issue 9: Resource-Proxy API Discovery Timeouts
+
+**Symptom**:
+- Application sync status shows "Unknown/Unknown" on Hub
+- Application controller logs show: `error synchronizing cache state: failed to get api resources: failed to discover server resources, zero resources returned: the server was unable to return a response in the time allotted`
+- Errors occur specifically for spoke clusters accessed via resource-proxy
+- Principal logs show agents successfully connected and sending cache updates
+
+**Root Cause**:
+ArgoCD's default timeout settings (60s for repo server, 180s for reconciliation) are insufficient for the agent-based architecture. The resource-proxy adds latency because it must relay API discovery requests through the agent connection to the spoke cluster, and responses take longer to return through this multi-hop path.
+
+**Solution**:
+Increase timeout values in ArgoCD ConfigMaps. The Terraform module automatically configures these in `main.tf`:
+
+1. **Repository Server Timeout** (argocd-cmd-params-cm):
+```yaml
+data:
+  controller.repo.server.timeout.seconds: "300"  # 5 minutes
+  server.connection.status.cache.expiration: "1h"  # Cache cluster status longer
+```
+
+2. **Reconciliation Timeouts** (argocd-cm):
+```yaml
+data:
+  timeout.reconciliation: "600s"  # 10 minutes
+  timeout.hard.reconciliation: "0"  # No hard limit
+```
+
+**Manual Application** (if not using Terraform):
+```bash
+# Update argocd-cmd-params-cm
+kubectl patch configmap argocd-cmd-params-cm -n argocd \
+  --type='merge' \
+  --patch '{"data":{
+    "controller.repo.server.timeout.seconds":"300",
+    "server.connection.status.cache.expiration":"1h"
+  }}'
+
+# Update argocd-cm
+kubectl patch configmap argocd-cm -n argocd \
+  --type='merge' \
+  --patch '{"data":{
+    "timeout.reconciliation":"600s",
+    "timeout.hard.reconciliation":"0"
+  }}'
+
+# Restart components to apply changes
+kubectl rollout restart deployment argocd-server -n argocd
+kubectl rollout restart statefulset argocd-application-controller -n argocd
+
+# Wait for rollouts to complete
+kubectl rollout status deployment/argocd-server -n argocd
+kubectl rollout status statefulset/argocd-application-controller -n argocd
+```
+
+**Verification**:
+```bash
+# Check ConfigMaps have timeout settings
+kubectl get configmap argocd-cmd-params-cm -n argocd -o yaml | grep timeout
+kubectl get configmap argocd-cm -n argocd -o yaml | grep timeout
+
+# Monitor application sync status
+kubectl get applications -n <agent-namespace> -w
+
+# Check application controller logs for timeout errors
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller --tail=100
+```
+
+**Troubleshooting**:
+If applications still show timeouts after configuration:
+1. Verify the ConfigMap changes were applied: `kubectl describe cm argocd-cmd-params-cm -n argocd`
+2. Confirm components restarted: `kubectl get pods -n argocd -o wide`
+3. Check agent connectivity: `kubectl logs -n argocd -l app.kubernetes.io/name=argocd-agent-principal`
+4. Test resource-proxy directly from a debug pod:
+```bash
+kubectl run -it --rm debug --image=curlimages/curl -n argocd -- \
+  curl -v http://argocd-agent-resource-proxy.argocd.svc.cluster.local:9090/healthz?agentName=agent-1
+```
+
+---
+
 ## Common Error Messages
 
 ### "Connection refused" from Agent

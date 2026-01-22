@@ -1,271 +1,355 @@
 # =============================================================================
-# DEPLOYMENT MODE CONTROL
+# DEPLOYMENT CONTROL
 # =============================================================================
 
 variable "deploy_hub" {
-  description = "Whether to deploy Hub (control plane) components"
+  description = "Deploy hub infrastructure (ArgoCD control plane + Principal)"
   type        = bool
   default     = true
 }
 
-variable "deploy_spoke" {
-  description = "Whether to deploy Spoke (workload) components"
+variable "deploy_spokes" {
+  description = "Deploy spoke clusters (workload clusters with agents)"
   type        = bool
   default     = true
 }
 
 # =============================================================================
-# HUB CLUSTER CONFIGURATION
+# CLUSTER CONFIGURATION
 # =============================================================================
-
-variable "hub_kubeconfig_path" {
-  description = "Path to kubeconfig file for Hub cluster"
-  type        = string
-  default     = "~/.kube/config"
-}
 
 variable "hub_cluster_context" {
-  description = "Kubernetes context for Hub cluster (leave empty to skip Hub deployment)"
+  description = "Kubectl context for hub cluster"
   type        = string
-  default     = ""
 }
 
-variable "hub_namespace" {
-  description = "Namespace for ArgoCD on Hub cluster"
-  type        = string
-  default     = "argocd"
-}
-
-variable "hub_argocd_url" {
-  description = "Public URL for ArgoCD UI on Hub (e.g., https://argocd.example.com)"
-  type        = string
-  default     = ""
-}
-
-variable "hub_principal_host" {
-  description = "Hostname for Agent Principal gRPC endpoint (e.g., agent-principal.example.com)"
-  type        = string
-  default     = ""
+variable "workload_clusters" {
+  description = "Map of agent_name => cluster_context for spoke clusters. Example: { \"agent-1\" = \"spoke-context-1\", \"agent-2\" = \"spoke-context-2\" }. All agents will run in 'managed' mode."
+  type        = map(string)
+  default     = {}
 }
 
 # =============================================================================
-# SPOKE CLUSTER CONFIGURATION
-# =============================================================================
-
-variable "spoke_kubeconfig_path" {
-  description = "Path to kubeconfig file for Spoke cluster"
-  type        = string
-  default     = "~/.kube/config"
-}
-
-variable "spoke_cluster_context" {
-  description = "Kubernetes context for Spoke cluster (leave empty to skip Spoke deployment)"
-  type        = string
-  default     = ""
-}
-
-variable "spoke_namespace" {
-  description = "Namespace for ArgoCD on Spoke cluster"
-  type        = string
-  default     = "argocd"
-}
-
-variable "spoke_id" {
-  description = "Unique identifier for this spoke cluster (e.g., spoke-01)"
-  type        = string
-  default     = "spoke-01"
-}
-
-variable "spoke_mgmt_namespace" {
-  description = "Management namespace on Hub for this spoke's applications"
-  type        = string
-  default     = "" # Defaults to <spoke_id>-mgmt in code
-}
-
-# =============================================================================
-# ARGOCD VERSION AND IMAGE SETTINGS
+# ARGOCD CONFIGURATION
 # =============================================================================
 
 variable "argocd_version" {
-  description = "Version of ArgoCD Helm chart"
+  description = "ArgoCD Agent version to deploy"
   type        = string
-  default     = "7.7.12"
+  default     = "v0.5.3"
 }
 
-variable "argocd_image_tag" {
-  description = "ArgoCD container image tag"
+variable "hub_namespace" {
+  description = "Namespace for ArgoCD on hub cluster"
   type        = string
-  default     = "v2.12.6"
+  default     = "argocd"
 }
 
-variable "skip_crds" {
-  description = "Whether to skip installing ArgoCD CRDs (set to true if CRDs already exist from another installation)"
-  type        = bool
-  default     = false
+variable "spoke_namespace" {
+  description = "Namespace for ArgoCD on spoke clusters"
+  type        = string
+  default     = "argocd"
 }
 
 # =============================================================================
-# CERTIFICATE CONFIGURATION
+# EXPOSURE CONFIGURATION
 # =============================================================================
 
-variable "ca_common_name" {
-  description = "Common Name for the Hub CA certificate"
+variable "ui_expose_method" {
+  description = "How to expose ArgoCD UI: 'loadbalancer' or 'ingress'"
   type        = string
-  default     = "ArgoCD Agent Hub CA"
+  default     = "ingress"
+
+  validation {
+    condition     = contains(["loadbalancer", "ingress"], var.ui_expose_method)
+    error_message = "ui_expose_method must be either 'loadbalancer' or 'ingress'."
+  }
 }
 
-variable "ca_organization" {
-  description = "Organization for the Hub CA certificate"
+variable "principal_expose_method" {
+  description = "How to expose Principal service: 'loadbalancer', 'ingress', or 'nodeport'"
   type        = string
-  default     = "ArgoCD"
+  default     = "ingress"
+
+  validation {
+    condition     = contains(["loadbalancer", "ingress", "nodeport"], var.principal_expose_method)
+    error_message = "principal_expose_method must be one of 'loadbalancer', 'ingress', or 'nodeport'."
+  }
 }
 
-variable "ca_validity_hours" {
-  description = "Validity period for CA certificate in hours"
-  type        = number
-  default     = 87600 # 10 years
-}
-
-variable "client_cert_validity_hours" {
-  description = "Validity period for client certificates in hours"
-  type        = number
-  default     = 8760 # 1 year
-}
-
-# =============================================================================
-# INTEGRATION WITH EXISTING MODULES
-# =============================================================================
-
-variable "install_cert_manager" {
-  description = "Whether to install cert-manager on clusters"
-  type        = bool
-  default     = false
-}
-
-variable "cert_manager_version" {
-  description = "Version of cert-manager chart"
-  type        = string
-  default     = "v1.15.0"
-}
-
-variable "cert_manager_namespace" {
-  description = "Namespace where cert-manager is installed"
-  type        = string
-  default     = "cert-manager"
-}
-
-variable "install_nginx_ingress" {
-  description = "Whether to install NGINX Ingress Controller"
-  type        = bool
-  default     = false
-}
-
-variable "nginx_ingress_version" {
-  description = "Version of ingress-nginx chart"
-  type        = string
-  default     = "4.10.1"
-}
-
-variable "nginx_ingress_namespace" {
-  description = "Namespace where NGINX Ingress is installed"
-  type        = string
-  default     = "ingress-nginx"
-}
-
-variable "ingress_class_name" {
-  description = "Ingress class to use for all ingress resources"
-  type        = string
-  default     = "nginx"
-}
-
-variable "letsencrypt_email" {
-  description = "Email address for Let's Encrypt certificate notifications"
+variable "argocd_host" {
+  description = "Hostname for ArgoCD UI (required if ui_expose_method='ingress')"
   type        = string
   default     = ""
 }
 
-variable "cert_issuer_name" {
-  description = "Name of the ClusterIssuer or Issuer"
+# =============================================================================
+# EXTERNAL PRINCIPAL (for spoke-only deployments)
+# =============================================================================
+
+variable "principal_address" {
+  description = "External Principal IP/hostname (only needed if deploy_hub=false). Get this from hub deployment outputs."
   type        = string
-  default     = "letsencrypt-prod"
+  default     = ""
 }
 
-variable "cert_issuer_kind" {
-  description = "Kind of Issuer (ClusterIssuer or Issuer)"
-  type        = string
-  default     = "ClusterIssuer"
-
-  validation {
-    condition     = contains(["ClusterIssuer", "Issuer"], var.cert_issuer_kind)
-    error_message = "cert_issuer_kind must be either 'ClusterIssuer' or 'Issuer'."
-  }
+variable "principal_port" {
+  description = "External Principal port (only needed if deploy_hub=false)"
+  type        = number
+  default     = 443
 }
 
 # =============================================================================
-# KEYCLOAK SSO CONFIGURATION (Optional)
+# KEYCLOAK INTEGRATION
 # =============================================================================
 
-variable "enable_keycloak_sso" {
-  description = "Whether to configure Keycloak SSO for ArgoCD"
+variable "enable_keycloak" {
+  description = "Enable Keycloak OIDC authentication for ArgoCD"
   type        = bool
   default     = false
 }
 
 variable "keycloak_url" {
-  description = "The URL of your Keycloak instance"
+  description = "Keycloak URL (e.g., https://keycloak.example.com)"
   type        = string
   default     = ""
+
+  validation {
+    condition     = var.enable_keycloak ? var.keycloak_url != "" : true
+    error_message = "keycloak_url is required when enable_keycloak is true"
+  }
 }
 
 variable "keycloak_user" {
-  description = "Keycloak Admin Username"
+  description = "Keycloak admin username"
   type        = string
   default     = "admin"
 }
 
 variable "keycloak_password" {
-  description = "Keycloak Admin Password"
+  description = "Keycloak admin password"
+  type        = string
+  sensitive   = true
+  default     = ""
+
+  validation {
+    condition     = var.enable_keycloak ? var.keycloak_password != "" : true
+    error_message = "keycloak_password is required when enable_keycloak is true"
+  }
+}
+
+variable "keycloak_realm" {
+  description = "Keycloak realm name to create ArgoCD client in"
+  type        = string
+  default     = "argocd"
+}
+
+variable "argocd_url" {
+  description = "ArgoCD URL for Keycloak redirect URIs (e.g., https://argocd.example.com)"
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.enable_keycloak ? var.argocd_url != "" : true
+    error_message = "argocd_url is required when enable_keycloak is true"
+  }
+}
+
+variable "keycloak_client_id" {
+  description = "Keycloak OIDC client ID for ArgoCD"
+  type        = string
+  default     = "argocd"
+}
+
+variable "keycloak_enable_pkce" {
+  description = "Enable PKCE authentication method (true) instead of Client Authentication (false). PKCE enables CLI login with --sso."
+  type        = bool
+  default     = false
+
+  validation {
+    condition     = var.keycloak_enable_pkce == true || var.keycloak_enable_pkce == false
+    error_message = "keycloak_enable_pkce must be either true or false."
+  }
+}
+
+variable "create_default_admin_user" {
+  description = "Create a default admin user in Keycloak for initial ArgoCD access"
+  type        = bool
+  default     = true
+}
+
+variable "default_admin_username" {
+  description = "Default admin username for Keycloak"
+  type        = string
+  default     = "argocd-admin"
+}
+
+variable "default_admin_email" {
+  description = "Default admin email for Keycloak"
+  type        = string
+  default     = "admin@argocd.local"
+}
+
+variable "default_admin_password" {
+  description = "Default admin password for Keycloak (change after first login if temporary)"
   type        = string
   sensitive   = true
   default     = ""
 }
 
-variable "keycloak_client_id" {
-  description = "Keycloak client ID for Terraform provider"
-  type        = string
-  default     = "admin-cli"
-}
-
-variable "target_realm" {
-  description = "The Keycloak Realm where ArgoCD will be registered"
-  type        = string
-  default     = "argocd"
+variable "default_admin_password_temporary" {
+  description = "Whether the default admin password is temporary (user must change on first login)"
+  type        = bool
+  default     = true
 }
 
 # =============================================================================
-# ADVANCED CONFIGURATION
+# RESOURCE PROXY & AGENT CREDENTIALS
 # =============================================================================
 
-variable "enable_redis_ha" {
-  description = "Enable Redis HA mode (requires 3+ replicas)"
+variable "enable_resource_proxy_credentials_secret" {
+  description = "Store resource proxy credentials in Kubernetes secret for reference and rotation"
+  type        = bool
+  default     = true
+}
+
+variable "enable_principal_ingress" {
+  description = "Expose Principal via Ingress (in addition to LoadBalancer). Requires cert-manager and nginx-ingress."
   type        = bool
   default     = false
 }
 
-variable "redis_replica_count" {
-  description = "Number of Redis replicas (only when HA enabled)"
-  type        = number
-  default     = 3
+variable "principal_ingress_host" {
+  description = "Hostname for Principal Ingress (e.g., principal.example.com)"
+  type        = string
+  default     = ""
 }
 
-variable "principal_replica_count" {
-  description = "Number of Agent Principal replicas on Hub"
-  type        = number
-  default     = 1
+# =============================================================================
+# APPPROJECT CONFIGURATION
+# =============================================================================
+
+variable "enable_appproject_sync" {
+  description = "Enable automatic AppProject synchronization to agents (required for managed mode)"
+  type        = bool
+  default     = true
 }
 
-variable "agent_replica_count" {
-  description = "Number of Agent replicas on Spoke"
+variable "appproject_default_source_namespaces" {
+  description = "Default AppProject source namespaces (repositories) - use ['*'] for all"
+  type        = list(string)
+  default     = ["*"]
+}
+
+variable "appproject_default_dest_server" {
+  description = "Default AppProject destination server - use '*' for all"
+  type        = string
+  default     = "*"
+}
+
+variable "appproject_default_dest_namespaces" {
+  description = "Default AppProject destination namespaces - use ['*'] for all"
+  type        = list(string)
+  default     = ["*"]
+}
+
+# =============================================================================
+# INFRASTRUCTURE MODULES
+# =============================================================================
+
+variable "install_cert_manager" {
+  description = "Install cert-manager (set to false if already exists in cluster)"
+  type        = bool
+  default     = false
+}
+
+variable "install_nginx_ingress" {
+  description = "Install nginx ingress controller (set to false if already exists in cluster)"
+  type        = bool
+  default     = false
+}
+
+variable "cert_manager_version" {
+  description = "cert-manager Helm chart version"
+  type        = string
+  default     = "v1.16.2"
+}
+
+variable "nginx_ingress_version" {
+  description = "nginx-ingress Helm chart version"
+  type        = string
+  default     = "4.11.3"
+}
+
+variable "cert_manager_release_name" {
+  description = "Helm release name for cert-manager"
+  type        = string
+  default     = "cert-manager"
+}
+
+variable "cert_manager_namespace" {
+  description = "Namespace for cert-manager"
+  type        = string
+  default     = "cert-manager"
+}
+
+variable "nginx_ingress_release_name" {
+  description = "Helm release name for nginx-ingress"
+  type        = string
+  default     = "nginx-ingress"
+}
+
+variable "nginx_ingress_namespace" {
+  description = "Namespace for nginx-ingress"
+  type        = string
+  default     = "ingress-nginx"
+}
+
+variable "cert_issuer_name" {
+  description = "Name of the cert-manager ClusterIssuer"
+  type        = string
+  default     = "letsencrypt-prod"
+}
+
+variable "cert_issuer_kind" {
+  description = "Kind of cert-manager issuer: 'Issuer' (namespace-scoped) or 'ClusterIssuer' (cluster-wide)"
+  type        = string
+  default     = "Issuer"
+}
+
+variable "letsencrypt_email" {
+  description = "Email for Let's Encrypt certificate notifications"
+  type        = string
+  default     = ""
+}
+
+variable "ingress_class_name" {
+  description = "Ingress class name to use"
+  type        = string
+  default     = "nginx"
+}
+
+# =============================================================================
+# PATHS AND TOOLS
+# =============================================================================
+
+variable "argocd_agentctl_path" {
+  description = "Path to argocd-agentctl binary (installed to /usr/local/bin by Terraform)"
+  type        = string
+  default     = "/usr/local/bin/argocd-agentctl"
+}
+
+# =============================================================================
+# HIGH AVAILABILITY
+# =============================================================================
+
+variable "principal_replicas" {
+  description = "Number of Principal replicas for HA (1=dev, 2+=production). Enables PodDisruptionBudget when >1"
   type        = number
   default     = 1
+
+  validation {
+    condition     = var.principal_replicas >= 1 && var.principal_replicas <= 5
+    error_message = "principal_replicas must be between 1 and 5."
+  }
 }
