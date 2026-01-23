@@ -9,6 +9,10 @@ terraform {
       source  = "hashicorp/helm"
       version = "~> 2.12"
     }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.2"
+    }
   }
 }
 
@@ -56,3 +60,5 @@ resource "helm_release" "nginx_ingress" {
   wait    = true
   timeout = 600
 }
+
+# NOTE: Namespace cleanup removed - Helm manages namespace lifecycle via create_namespace=true

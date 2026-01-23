@@ -25,7 +25,7 @@
 # Configuration Extraction
 # ═══════════════════════════════════════════════════════════════════════════════
 
-TF_VARS="$(dirname "$0")/../terraform/terraform.tfvars"
+TF_VARS="$(dirname "$0")/../terraform/environments/prod/terraform.tfvars"
 
 if [ ! -f "$TF_VARS" ]; then
   echo "❌ Error: terraform.tfvars not found at $TF_VARS"

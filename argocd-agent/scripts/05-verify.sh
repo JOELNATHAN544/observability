@@ -72,7 +72,7 @@ spec:
     targetRevision: HEAD
     path: guestbook
   destination:
-    server: https://${PRINCIPAL_IP}:${SVC_PORT}?agentName=${AGENT_NAME}
+    server: https://argocd-agent-resource-proxy.argocd.svc.cluster.local:9090?agentName=${AGENT_NAME}
     namespace: guestbook
   syncPolicy:
     automated:

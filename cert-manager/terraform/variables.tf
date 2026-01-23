@@ -4,6 +4,12 @@ variable "install_cert_manager" {
   default     = false
 }
 
+variable "create_issuer" {
+  description = "Whether to create the cert issuer (set to false if creating it separately to avoid circular dependencies)"
+  type        = bool
+  default     = true
+}
+
 variable "release_name" {
   description = "Helm release name"
   type        = string

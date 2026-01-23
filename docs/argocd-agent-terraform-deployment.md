@@ -3,46 +3,75 @@
 ## Prerequisites
 
 - Terraform >= 1.0
-- Two Kubernetes clusters (Hub and Spoke) with kubeconfig access
+- Kubernetes clusters (Hub and/or Spoke) with kubeconfig access
 - kubectl CLI configured
-- Network connectivity from Spoke to Hub (port 8443)
-- (Optional) DNS entries for ArgoCD UI and Principal
+- argocd-agentctl binary (for PKI operations)
+- Network connectivity from Spoke to Hub (port 443 for Principal)
+- (Optional) Existing cert-manager and ingress-nginx installations
 - (Optional) Keycloak instance for SSO
+
+## Architecture Overview
+
+This deployment uses a **modular Terraform structure** with separate hub-cluster and spoke-cluster modules orchestrated through an environment-specific configuration.
+
+```
+terraform/
+├── environments/
+│   └── prod/              # Production environment (USE THIS)
+│       ├── main.tf        # Module orchestration
+│       ├── variables.tf   # Variable definitions
+│       ├── terraform.tfvars.example
+│       └── ...
+├── modules/
+│   ├── hub-cluster/       # Hub cluster module
+│   └── spoke-cluster/     # Spoke cluster module
+├── TIMEOUTS.md            # Timeout configuration guide
+├── RBAC.md                # RBAC and SSO guide
+└── README.md
+```
 
 ## Step 1: Setup
 
-Clone the repository and navigate to the argocd-agent terraform directory:
+Clone the repository and navigate to the production environment directory:
 
 ```bash
-cd /path/to/observability/argocd-agent/terraform
+cd /path/to/observability/argocd-agent/terraform/environments/prod
 ```
 
 ## Step 2: Configure Variables
 
-Copy the template and edit with your values:
+Copy the example and edit with your values:
 
 ```bash
-cp terraform.tfvars.template terraform.tfvars
+cp terraform.tfvars.example terraform.tfvars
 ```
 
 ### Minimum Required Configuration
 
 ```hcl
 # Deployment mode
-deploy_hub   = true
-deploy_spoke = true
+deploy_hub    = true
+deploy_spokes = true
 
 # Hub cluster
 hub_cluster_context = "gke_project_region_hub-cluster"
-hub_argocd_url      = "https://argocd.example.com"
-hub_principal_host  = "agent-principal.example.com"
 
-# Spoke cluster
-spoke_cluster_context = "gke_project_region_spoke-cluster"
-spoke_id             = "spoke-01"
+# Spoke clusters (map of agent_name => cluster_context)
+workload_clusters = {
+  "agent-1" = "gke_project_region_spoke-1"
+  "agent-2" = "gke_project_region_spoke-2"
+}
 
-# Email for Let's Encrypt
-letsencrypt_email = "admin@example.com"
+# ArgoCD version
+argocd_version = "v0.5.3"
+
+# Exposure method
+ui_expose_method        = "loadbalancer"  # or "ingress"
+principal_expose_method = "loadbalancer"  # or "ingress"
+
+# For ingress mode, set:
+# argocd_host = "argocd.example.com"
+# ingress_class_name = "nginx"
 ```
 
 ## Step 3: Deploy
@@ -60,9 +89,10 @@ terraform plan
 ```
 
 Review the plan carefully. You should see:
-- Hub: ArgoCD Helm release, Principal deployment, CA certificates
-- Spoke: ArgoCD Helm release, Agent deployment, client certificates
-- Namespaces, RBAC, secrets
+- **Hub Module**: ArgoCD installation, Principal, PKI CA, per-agent namespaces
+- **Spoke Module**: ArgoCD in agent-managed mode, agents, client certificates
+- **Infrastructure**: cert-manager and ingress-nginx (if enabled)
+- Namespaces, RBAC, secrets, network policies
 
 ### Apply Configuration
 
@@ -72,7 +102,7 @@ terraform apply
 
 Type `yes` when prompted.
 
-**Deployment time**: 5-10 minutes
+**Deployment time**: 10-15 minutes (depending on number of agents)
 
 ## Step 4: Verify Deployment
 
@@ -86,97 +116,99 @@ export HUB_CTX="your-hub-context"
 kubectl --context=$HUB_CTX get pods -n argocd
 
 # Expected components:
-# - argocd-server
-# - argocd-agent-principal
+# - argocd-server (UI and API)
+# - argocd-agent-principal (agent manager)
+# - argocd-repo-server (for hub operations)
 # - argocd-redis
 # - argocd-applicationset-controller
-# NO argocd-application-controller (should be 0/0)
+# ❌ NO argocd-application-controller (runs on spokes)
 
 # Check Principal logs
-kubectl --context=$HUB_CTX logs -n argocd deployment/argocd-agent-principal
+kubectl --context=$HUB_CTX logs -n argocd -l app.kubernetes.io/name=argocd-agent-principal
 
 # Verify Principal can access Redis
-kubectl --context=$HUB_CTX exec -n argocd deployment/argocd-agent-principal -- \
+kubectl --context=$HUB_CTX exec -n argocd deployment/argocd-repo-server -- \
   redis-cli -h argocd-redis ping
 # Should return: PONG
 
-# Check spoke management namespace
-kubectl --context=$HUB_CTX get ns | grep spoke
+# Check agent namespaces (one per agent)
+kubectl --context=$HUB_CTX get ns | grep -E "agent-|spoke-"
+# Should show: agent-1, agent-2, etc.
+
+# Get ArgoCD outputs
+terraform output
 ```
 
 ### Spoke Cluster Verification
 
 ```bash
-# Get Spoke context
-export SPOKE_CTX="your-spoke-context"
+# For each spoke cluster, verify:
+export SPOKE_CTX="your-spoke-1-context"
 
 # Check pods
 kubectl --context=$SPOKE_CTX get pods -n argocd
 
 # Expected components:
-# - argocd-application-controller
-# - argocd-repo-server
-# - argocd-redis
-# - argocd-agent
+# - argocd-application-controller (application reconciliation)
+# - argocd-repo-server (local repo server)
+# - argocd-redis (local cache)
+# - argocd-agent (gRPC client)
 
-# Check Agent logs
-kubectl --context=$SPOKE_CTX logs -n argocd deployment/argocd-agent
+# Check Agent logs for successful connection
+kubectl --context=$SPOKE_CTX logs -n argocd -l app.kubernetes.io/name=argocd-agent
 
-# Look for: "Connected to principal" (successful connection)
+# Look for: "connected to principal" or "agent started"
 
-# Check Agent certificates
+# Verify agent certificates
+kubectl --context=$SPOKE_CTX get secret -n argocd argocd-agent-client-tls
+kubectl --context=$SPOKE_CTX get secret -n argocd argocd-agent-ca
+
+# Check agent connectivity to Principal
 kubectl --context=$SPOKE_CTX exec -n argocd deployment/argocd-agent -- \
-  ls -la /app/config/tls
-# Should show: ca.crt, tls.crt, tls.key
+  curl -v https://YOUR_PRINCIPAL_ADDRESS:443/healthz
 ```
 
 ## Important: Timeout Configuration
 
-**The Terraform module automatically configures timeout settings required for the agent architecture.**
+**The Terraform modules automatically configure extended timeout settings required for the agent architecture.**
 
 ### Why Timeouts Matter
 
-The agent architecture introduces additional latency due to the resource-proxy layer:
-- API discovery requests travel: Application Controller → Resource-Proxy → Agent → Spoke Cluster
-- Responses return through the same multi-hop path
-- ArgoCD's default timeouts (60s repo server, 180s reconciliation) are insufficient
+The agent architecture introduces additional latency due to resource-proxy communication:
+- Requests travel: Application Controller → Resource-Proxy → Agent → Principal → Hub
+- Default ArgoCD timeouts (60s repo server, 180s reconciliation) are insufficient
+- Multi-hop communication requires extended timeout values
 
 ### Automatic Configuration
 
-The Terraform module sets these timeouts automatically in `main.tf`:
+The hub-cluster module configures these timeouts automatically:
 
-**argocd-cmd-params-cm:**
-```yaml
-controller.repo.server.timeout.seconds: "300"     # 5 minutes (vs 60s default)
-server.connection.status.cache.expiration: "1h"   # Cache cluster status longer
-```
+| Setting | Default | Agent Mode | Reason |
+|---------|---------|------------|--------|
+| `kubectl_timeout` | 60s | 300s | Deployment rollouts take longer |
+| `namespace_delete_timeout` | 60s | 120s | Resource finalizers need time |
+| `argocd_install_retry_attempts` | 3 | 5 | Network transients more common |
+| `principal_loadbalancer_wait_timeout` | 120s | 300s | Cloud LB provisioning |
 
-**argocd-cm:**
-```yaml
-timeout.reconciliation: "600s"        # 10 minutes (vs 180s default)
-timeout.hard.reconciliation: "0"       # No hard limit
-```
+### Tuning for Your Environment
 
-### Symptoms Without Proper Timeouts
+See **[TIMEOUTS.md](../argocd-agent/terraform/TIMEOUTS.md)** for:
+- Detailed timeout variable documentation
+- Environment-specific tuning guidelines (dev/staging/prod)
+- Timeout interaction examples
+- Troubleshooting timeout-related issues
 
-If timeouts are not configured, you'll see:
-- Applications stuck in "Unknown/Unknown" status
-- Application controller logs showing: `failed to get api resources: the server was unable to return a response in the time allotted`
-- Resource-proxy connection errors
-
-### Verification
-
-After deployment, verify timeout settings:
+### Quick Verification
 
 ```bash
-# Check controller timeouts
-kubectl get configmap argocd-cmd-params-cm -n argocd -o yaml | grep timeout
+# Check module-configured timeouts
+cd terraform/environments/prod
+terraform show | grep timeout
 
-# Check reconciliation timeouts
-kubectl get configmap argocd-cm -n argocd -o yaml | grep timeout
+# Verify deployments are healthy
+kubectl --context=$HUB_CTX get deployments -n argocd
+kubectl --context=$SPOKE_CTX get deployments -n argocd
 ```
-
-See [Issue 9 in Troubleshooting Guide](argocd-agent-troubleshooting.md#issue-9-resource-proxy-api-discovery-timeouts) for manual configuration steps.
 
 ---
 
@@ -184,13 +216,16 @@ See [Issue 9 in Troubleshooting Guide](argocd-agent-troubleshooting.md#issue-9-r
 
 ### Create Test Application on Hub
 
+Create an Application in the agent's management namespace on the Hub:
+
 ```bash
+# For agent-1 (adjust namespace for your agent names)
 kubectl --context=$HUB_CTX apply -f - <<EOF
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
   name: guestbook
-  namespace: spoke-01-mgmt
+  namespace: agent-1  # This is the agent's namespace on Hub
 spec:
   project: default
   source:
@@ -210,24 +245,25 @@ EOF
 ### Verify on Hub
 
 ```bash
-# Check Application exists
-kubectl --context=$HUB_CTX get application -n spoke-01-mgmt guestbook
+# Check Application exists in agent namespace
+kubectl --context=$HUB_CTX get application -n agent-1 guestbook
 
-# Wait for sync
-kubectl --context=$HUB_CTX wait --for=condition=Synced \
-  application/guestbook -n spoke-01-mgmt --timeout=2m
+# Check sync status (may take a few moments)
+kubectl --context=$HUB_CTX get application -n agent-1 guestbook -o jsonpath='{.status.sync.status}'
+# Should show: Synced
 ```
 
 ### Verify on Spoke
 
 ```bash
-# Application should be mirrored to Spoke
-kubectl --context=$SPOKE_CTX get application -n argocd guestbook
+# Application should be mirrored to spoke cluster
+export SPOKE1_CTX="your-spoke-1-context"
+kubectl --context=$SPOKE1_CTX get application -n argocd guestbook
 
-# Resources should be deployed
-kubectl --context=$SPOKE_CTX get all -n default -l app=guestbook
+# Resources should be deployed on spoke
+kubectl --context=$SPOKE1_CTX get all -n default -l app.kubernetes.io/instance=guestbook
 
-# Expected: deployment, service, pods
+# Expected: deployment, service, pods in Running state
 ```
 
 ### Check ArgoCD UI
@@ -247,66 +283,79 @@ Login and verify:
 
 ## Deployment Modes
 
-### Hub-Only Deployment
+### Mode 1: Full Deployment (Hub + Multiple Spokes)
+
+Deploy complete hub-and-spoke architecture simultaneously:
+
+```hcl
+deploy_hub    = true
+deploy_spokes = true
+
+hub_cluster_context = "hub-context"
+
+workload_clusters = {
+  "prod-agent"    = "gke_project_region_prod-cluster"
+  "staging-agent" = "gke_project_region_staging-cluster"
+  "dev-agent"     = "gke_project_region_dev-cluster"
+}
+
+ui_expose_method        = "loadbalancer"
+principal_expose_method = "loadbalancer"
+```
+
+**Best for**: New deployments, setting up complete environments
+
+### Mode 2: Hub-Only Deployment
 
 Setup control plane first, add spokes later:
 
 ```hcl
-deploy_hub   = true
-deploy_spoke = false
+deploy_hub    = true
+deploy_spokes = false
 
 hub_cluster_context = "hub-context"
-hub_argocd_url      = "https://argocd.example.com"
-hub_principal_host  = "agent-principal.example.com"
+workload_clusters   = {}  # Empty - no spokes yet
+
+ui_expose_method        = "ingress"
+principal_expose_method = "loadbalancer"
+argocd_host             = "argocd.example.com"
 ```
 
-### Spoke-Only Deployment
+After deployment, get the Principal address for spoke connections:
+```bash
+terraform output principal_address
+terraform output principal_port
+```
+
+**Best for**: Phased rollouts, testing hub first
+
+### Mode 3: Spoke-Only Deployment
 
 Add additional spokes to existing Hub:
 
 ```hcl
-deploy_hub   = false
-deploy_spoke = true
+deploy_hub    = false
+deploy_spokes = true
 
-spoke_cluster_context = "spoke-02-context"
-spoke_id              = "spoke-02"
+hub_cluster_context = "hub-context"  # For agent operations
+hub_namespace       = "argocd"
 
-# Hub Principal endpoint (must exist)
-hub_principal_host = "agent-principal.example.com"
+# External Principal from existing hub
+principal_address = "34.89.123.45"  # From hub deployment output
+principal_port    = 443
+
+# New spokes to add
+workload_clusters = {
+  "new-agent-1" = "gke_project_region_new-cluster-1"
+  "new-agent-2" = "gke_project_region_new-cluster-2"
+}
 ```
 
-**Note**: When deploying spoke-only, you need the Hub CA certificate. Store it in Terraform state from initial Hub deployment, or manually provide it.
-
-## Multi-Spoke Scaling
-
-### Option 1: Separate Terraform Directories
-
-```bash
-cp -r terraform spoke-02-terraform
-cd spoke-02-terraform
-# Edit terraform.tfvars with spoke-02 configuration
-terraform init
-terraform apply
-```
-
-### Option 2: Terraform Workspaces
-
-```bash
-# Create workspace for spoke-02
-terraform workspace new spoke-02
-terraform workspace select spoke-02
-
-# Edit terraform.tfvars for spoke-02
-terraform apply
-```
-
-### Option 3: Terraform Modules
-
-Create a wrapper module that calls argocd-agent module multiple times with different configurations.
+**Best for**: Scaling out to additional clusters, incremental growth
 
 ## Post-Deployment Configuration
 
-### Configure Ingress DNS
+### Configure DNS (If Using LoadBalancer)
 
 Point your DNS records to the LoadBalancer IPs:
 
@@ -315,19 +364,26 @@ Point your DNS records to the LoadBalancer IPs:
 kubectl --context=$HUB_CTX get svc -n argocd argocd-server -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 
 # Get Principal LoadBalancer IP
-kubectl --context=$HUB_CTX get ingress -n argocd argocd-agent-principal \
-  -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
+kubectl --context=$HUB_CTX get svc -n argocd argocd-agent-principal -o jsonpath='{.status.loadBalancer.ingress[0].ip}'
 ```
 
 Create DNS A records:
 - `argocd.example.com` → ArgoCD UI IP
-- `agent-principal.example.com` → Principal IP
+- `principal.example.com` → Principal IP
 
 ### Configure Keycloak SSO (Optional)
 
-If `enable_keycloak_sso = true`, configure Keycloak OIDC client:
+If `enable_keycloak = true`, the module automatically configures:
+- Keycloak OIDC client for ArgoCD
+- Three default groups: ArgoCDAdmins, ArgoCDDevelopers, ArgoCDViewers
+- RBAC policy mappings
 
-See [Keycloak SSO Configuration](../docs/keycloak-sso-setup.md)
+See **[RBAC.md](../argocd-agent/terraform/RBAC.md)** for:
+- Complete Keycloak setup instructions
+- User and group management
+- Custom RBAC policy examples
+- Project-based access control
+- Security best practices
 
 ## Troubleshooting
 

@@ -126,3 +126,16 @@ principal_replicas = 2
 # workload_clusters = {
 #   "agent-4" = "gke_project_region_spoke-4"
 # }
+
+# =============================================================================
+# ARGOCD COMPONENT NAMES (Optional - Customize for specific deployments)
+# =============================================================================
+
+# Uncomment and modify if you need custom ArgoCD component names
+# argocd_repo_server_name            = "argocd-repo-server"
+# argocd_application_controller_name = "argocd-application-controller"
+# argocd_redis_name                  = "argocd-redis"
+# argocd_redis_network_policy_name   = "argocd-redis-network-policy"
+# argocd_cmd_params_cm_name          = "argocd-cmd-params-cm"
+# argocd_cm_name                     = "argocd-cm"
+# argocd_secret_name                 = "argocd-secret"

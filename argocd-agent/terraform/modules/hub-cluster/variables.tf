@@ -353,3 +353,137 @@ variable "principal_replicas" {
     error_message = "principal_replicas must be between 1 and 5."
   }
 }
+
+# =============================================================================
+# TIMEOUTS AND OPERATIONAL PARAMETERS
+# =============================================================================
+
+variable "kubectl_timeout" {
+  description = "Timeout for kubectl wait operations (deployment rollouts, pod ready checks)"
+  type        = string
+  default     = "300s"
+
+  validation {
+    condition     = can(regex("^[0-9]+[smh]$", var.kubectl_timeout))
+    error_message = "kubectl_timeout must be a valid duration (e.g., 300s, 5m, 1h)."
+  }
+}
+
+variable "namespace_delete_timeout" {
+  description = "Timeout for namespace deletion operations"
+  type        = string
+  default     = "120s"
+
+  validation {
+    condition     = can(regex("^[0-9]+[smh]$", var.namespace_delete_timeout))
+    error_message = "namespace_delete_timeout must be a valid duration (e.g., 120s, 2m)."
+  }
+}
+
+variable "argocd_install_retry_attempts" {
+  description = "Number of retry attempts for ArgoCD installation (handles transient network issues)"
+  type        = number
+  default     = 5
+
+  validation {
+    condition     = var.argocd_install_retry_attempts >= 1 && var.argocd_install_retry_attempts <= 10
+    error_message = "argocd_install_retry_attempts must be between 1 and 10."
+  }
+}
+
+variable "argocd_install_retry_delay" {
+  description = "Delay between ArgoCD installation retry attempts (seconds)"
+  type        = number
+  default     = 15
+
+  validation {
+    condition     = var.argocd_install_retry_delay >= 5 && var.argocd_install_retry_delay <= 60
+    error_message = "argocd_install_retry_delay must be between 5 and 60 seconds."
+  }
+}
+
+variable "principal_loadbalancer_wait_timeout" {
+  description = "Maximum wait time for Principal LoadBalancer IP allocation (seconds)"
+  type        = number
+  default     = 300
+
+  validation {
+    condition     = var.principal_loadbalancer_wait_timeout >= 60 && var.principal_loadbalancer_wait_timeout <= 600
+    error_message = "principal_loadbalancer_wait_timeout must be between 60 and 600 seconds."
+  }
+}
+
+# =============================================================================
+# SERVICE NAMING AND DNS
+# =============================================================================
+
+variable "argocd_server_service_name" {
+  description = "Name of the ArgoCD server service"
+  type        = string
+  default     = "argocd-server"
+}
+
+variable "principal_service_name" {
+  description = "Name of the ArgoCD Agent Principal service"
+  type        = string
+  default     = "argocd-agent-principal"
+}
+
+variable "resource_proxy_service_name" {
+  description = "Name of the ArgoCD Agent resource-proxy service"
+  type        = string
+  default     = "argocd-agent-resource-proxy"
+}
+
+variable "resource_proxy_port" {
+  description = "Port for resource-proxy service"
+  type        = number
+  default     = 9090
+
+  validation {
+    condition     = var.resource_proxy_port > 0 && var.resource_proxy_port <= 65535
+    error_message = "resource_proxy_port must be a valid port number (1-65535)."
+  }
+}
+
+variable "argocd_repo_server_name" {
+  description = "Name of the ArgoCD repo-server deployment"
+  type        = string
+  default     = "argocd-repo-server"
+}
+
+variable "argocd_application_controller_name" {
+  description = "Name of the ArgoCD application-controller statefulset"
+  type        = string
+  default     = "argocd-application-controller"
+}
+
+variable "argocd_redis_name" {
+  description = "Name of the ArgoCD Redis deployment"
+  type        = string
+  default     = "argocd-redis"
+}
+
+variable "argocd_redis_network_policy_name" {
+  description = "Name of the ArgoCD Redis NetworkPolicy"
+  type        = string
+  default     = "argocd-redis-network-policy"
+}
+
+variable "argocd_cmd_params_cm_name" {
+  description = "Name of the ArgoCD command parameters ConfigMap"
+  type        = string
+  default     = "argocd-cmd-params-cm"
+}
+
+variable "argocd_cm_name" {
+  description = "Name of the main ArgoCD ConfigMap"
+  type        = string
+  default     = "argocd-cm"
+}
+
+variable "argocd_secret_name" {
+  description = "Name of the ArgoCD secret"
+  type        = string
+  default     = "argocd-secret"
+}
