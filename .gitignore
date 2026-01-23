@@ -134,3 +134,6 @@ pki-ca-backup*.yaml.gpg
 # Terraform temp files
 .principal_ip.json
 *LOG_FILE
+
+# Zencoder files
+.zencoder
