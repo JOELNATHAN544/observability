@@ -8,12 +8,23 @@
 
 set -e
 
-export HUB_CTX="gke_observe-472521_europe-west3_observe-prod-cluster"
-VERSION="v0.5.3"
+# Configuration
+HUB_CTX="${HUB_CTX:-}"
+VERSION="${VERSION:-v0.5.3}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+INITIAL_ALLOWED_NAMESPACES="${1:-agent-1}"
 
-# Default allowed namespaces - will be updated by 04-agent-connect.sh for each new agent
-INITIAL_ALLOWED_NAMESPACES="${1:-my-first-agent,agent-2,agent-3}"
+# Usage
+if [ -z "$HUB_CTX" ]; then
+  echo "Usage: HUB_CTX=<context> [VERSION=v0.5.3] $0 [allowed-namespaces]"
+  echo ""
+  echo "Example:"
+  echo "  HUB_CTX=gke_project_region_hub $0 agent-1,agent-2"
+  echo ""
+  echo "Available contexts:"
+  kubectl config get-contexts -o name
+  exit 1
+fi
 
 echo "════════════════════════════════════════════════"
 echo "  Step 2: PKI & Principal Setup"

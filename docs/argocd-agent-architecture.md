@@ -1,8 +1,8 @@
 # ArgoCD Agent Architecture
 
-## Overview
+Hub-and-Spoke architecture with centralized control plane managing applications across multiple workload clusters using Argo CD Agent in Managed Mode.
 
-The ArgoCD Hub-and-Spoke architecture implements a centralized control plane (Hub) that manages applications across multiple workload clusters (Spokes) using the Argo CD Agent in Managed Mode with Local Repo Servers.
+---
 
 ## Architecture Diagram
 
@@ -12,13 +12,11 @@ graph TB
         UI[ArgoCD UI/Server]
         Principal[Agent Principal<br/>gRPC Server]
         Redis_Hub[Redis]
-        AppSet[ApplicationSet<br/>Controller]
-        HubNS1[spoke-01-mgmt<br/>namespace]
-        HubNS2[spoke-02-mgmt<br/>namespace]
+        HubNS1[spoke-01<br/>namespace]
+        HubNS2[spoke-02<br/>namespace]
         
         UI --> Redis_Hub
         Principal --> Redis_Hub
-        AppSet --> Redis_Hub
         Principal -.watches.-> HubNS1
         Principal -.watches.-> HubNS2
     end
@@ -62,30 +60,32 @@ graph TB
     style Controller2 fill:#95E1D3
 ```
 
+---
+
 ## Component Breakdown
 
-### Hub Cluster Components
+### Hub Cluster
 
 | Component | Purpose | Replicas | Network Access |
 |-----------|---------|----------|----------------|
 | `argocd-server` | Web UI and API server | 1-2 | Ingress (HTTPS) |
 | `argocd-agent-principal` | Central agent manager | 1-2 | Ingress (gRPC/TLS), Redis |
-| `redis` | Shared cache for server/principal | 1 or 3 (HA) | Internal only |
+| `redis` | Shared cache | 1 or 3 (HA) | Internal only |
 | `applicationset-controller` | ApplicationSet management | 1 | Redis |
-| **NOT PRESENT** | `argocd-application-controller` | 0 | N/A |
+| **NOT PRESENT** | `argocd-application-controller` | 0 | Runs on spokes only |
 
-### Spoke Cluster Components
+### Spoke Cluster
 
 | Component | Purpose | Replicas | Network Access |
 |-----------|---------|----------|----------------|
-| `argocd-agent` | Agent client (gRPC to Hub) | 1-2 | Hub Principal (outbound) |
+| `argocd-agent` | Agent client (gRPC to Hub) | 1-2 | Hub Principal (outbound only) |
 | `argocd-application-controller` | Application reconciliation | 1 | Localhost repo-server, Redis |
 | `argocd-repo-server` | Local repository service | 1-2 | Localhost only |
 | `redis` | Local cache | 1 | Localhost only |
 
-## Network Architecture
+---
 
-### Communication Flows
+## Communication Flow
 
 ```mermaid
 sequenceDiagram
@@ -94,235 +94,131 @@ sequenceDiagram
     participant Hub_Principal as Hub: Principal
     participant Spoke_Agent as Spoke: Agent
     participant Spoke_Controller as Spoke: Controller
-    participant Spoke_Repo as Spoke: Repo Server
     participant K8s as Spoke: Kubernetes API
     
-    User->>Hub_UI: 1. Create Application<br/>in spoke-01-mgmt
+    User->>Hub_UI: 1. Create Application<br/>in spoke-01 namespace
     Hub_UI->>Hub_Principal: 2. Application stored<br/>Principal watches namespace
     Spoke_Agent->>Hub_Principal: 3. Poll for changes<br/>(gRPC + mTLS)
     Hub_Principal->>Spoke_Agent: 4. Send Application manifest
     Spoke_Agent->>K8s: 5. Create Application CR<br/>in spoke argocd namespace
     Spoke_Controller->>K8s: 6. Watch Applications
-    Spoke_Controller->>Spoke_Repo: 7. Request manifest rendering<br/>(localhost:8081)
-    Spoke_Repo->>Spoke_Controller: 8. Return rendered manifests
-    Spoke_Controller->>K8s: 9. Apply resources
-    Spoke_Controller->>Spoke_Agent: 10. Report status
-    Spoke_Agent->>Hub_Principal: 11. Sync status back
-    Hub_Principal->>Hub_UI: 12. Display in UI
+    Spoke_Controller->>K8s: 7. Apply resources
+    Spoke_Agent->>Hub_Principal: 8. Sync status back
+    Hub_Principal->>Hub_UI: 9. Display in UI
 ```
 
-### Network Requirements
+---
 
-**Spoke → Hub (Required)**:
+## Network Requirements
+
+**Spoke → Hub** (Required):
 - Protocol: gRPC over TLS (mTLS)
-- Port: 8443 (configurable)
-- Endpoint: `agent-principal.example.com:8443`
-- Authentication: Client certificate
+- Port: 443 or 8443 (configurable)
+- Endpoint: `agent-principal.example.com:443`
+- Authentication: Client certificate (RSA 4096)
 
-**Hub → Spoke (NOT Allowed)**:
+**Hub → Spoke** (NOT Allowed):
 - No direct connectivity from Hub to Spoke
 - Unidirectional communication only
 
-**Within Spoke (Localhost)**:
+**Within Spoke** (Localhost):
 - Application Controller → Repo Server: `localhost:8081`
 - Application Controller → Redis: `localhost:6379`
 
-## Application Namespace Patterns
+---
 
-### Pattern 1: Single Namespace per Spoke (Implemented)
+## Namespace Pattern
+
+Hub cluster creates one namespace per spoke for application management:
 
 ```
 Hub Cluster:
 ├── argocd (namespace)
-│   └── Hub components
-├── spoke-01-mgmt (namespace)
+│   └── Hub components (server, principal, redis)
+├── spoke-01 (namespace)
 │   └── Applications for spoke-01
-├── spoke-02-mgmt (namespace)
+├── spoke-02 (namespace)
 │   └── Applications for spoke-02
-└── spoke-N-mgmt (namespace)
+└── spoke-N (namespace)
     └── Applications for spoke-N
 
 Spoke-01 Cluster:
 └── argocd (namespace)
-    ├── Spoke components
-    └── Mirrored Applications
-
-Agent Configuration:
-  ARGOCD_AGENT_NAMESPACE=spoke-01-mgmt
+    ├── Spoke components (agent, controller, repo-server, redis)
+    └── Mirrored Applications from hub spoke-01 namespace
 ```
 
+**Agent Configuration**: Each agent watches single namespace on hub (`ARGOCD_AGENT_NAMESPACE=spoke-01`)
+
 **Advantages**:
-- Simple RBAC (single namespace per spoke)
+- Simple RBAC (one namespace per spoke)
 - Clear separation between spokes
 - Easy to understand and manage
 
-### Pattern 2: Multi-Namespace Monitoring (Future Enhancement)
+---
 
-```
-Hub Cluster:
-├── argocd (namespace)
-├── spoke-01-apps (namespace)
-│   └── Application workloads
-├── spoke-01-infra (namespace)
-│   └── Infrastructure applications
-├── spoke-02-apps (namespace)
-└── spoke-02-infra (namespace)
+## PKI Certificate Hierarchy
 
-Agent Configuration:
-  ARGOCD_AGENT_NAMESPACE=spoke-01-apps,spoke-01-infra
-```
-
-**Advantages**:
-- Logical grouping (apps vs infra)
-- Finer-grained RBAC per category
-- Team-based access control
-
-**Complexity**:
-- Requires ClusterRole for Agent
-- RoleBindings in each watched namespace
-- More complex RBAC management
-
-## PKI Certificate Chain (Terraform-Managed)
-
-### Certificate Hierarchy
+All PKI operations fully automated via Terraform:
 
 ```
 Hub CA (Self-Signed)
-├── Common Name: ArgoCD Agent Hub CA
+├── RSA 4096-bit
 ├── Validity: 10 years
-├── Algorithm: RSA 4096-bit
+├── Stored: Hub cluster secret `argocd-agent-ca`
 │
-├── spoke-01 Client Certificate
-│   ├── Common Name: spoke-01
-│   ├──Validity: 1 year
-│   └── Signed by: Hub CA
-│
-├── spoke-02 Client Certificate
-│   ├── Common Name: spoke-02
-│   ├── Validity: 1 year
-│   └── Signed by: Hub CA
-│
-└── spoke-N Client Certificate
-    └── ...
+└── Spoke Client Certificates
+    ├── spoke-01 (RSA 4096, 1 year validity)
+    ├── spoke-02 (RSA 4096, 1 year validity)
+    └── spoke-N (RSA 4096, 1 year validity)
+    └── Stored: Spoke cluster secret `argocd-agent-client-cert`
 ```
 
-### Certificate Distribution
+**Certificate Distribution**:
 
 | Certificate | Location | Purpose |
 |-------------|----------|---------|
-| Hub CA (cert + key) | Hub cluster secret: `argocd-agent-ca` | Sign client certs, verify agents |
-| Hub CA (cert only) | Spoke cluster secret: `argocd-agent-client-cert` | Verify Principal |
-| Spoke client cert | Hub cluster secret: `<spoke-id>-client-cert` | Reference copy |
-| Spoke client cert | Spoke cluster secret: `argocd-agent-client-cert` | Agent authentication |
+| Hub CA (cert + key) | Hub: `argocd-agent-ca` | Sign client certs, verify agents |
+| Hub CA (cert only) | Spoke: `argocd-agent-client-cert` | Verify Principal |
+| Spoke client cert | Spoke: `argocd-agent-client-cert` | Agent authentication |
 
-### Terraform PKI Flow
+See [Operations Guide](argocd-agent-operations.md#certificate-management) for rotation procedures.
 
-```hcl
-# 1. Generate Hub CA
-tls_private_key.hub_ca (RSA 4096)
-  ↓
-tls_self_signed_cert.hub_ca
-  ↓
-kubernetes_secret.hub_ca (Hub cluster)
-
-# 2. Generate Spoke Client Cert
-tls_private_key.spoke_client (RSA 4096)
-  ↓
-tls_cert_request.spoke_client
-  ↓
-tls_locally_signed_cert.spoke_client (signed by Hub CA)
-  ↓
-├── kubernetes_secret.hub_spoke_client_cert (Hub cluster)
-└── kubernetes_secret.spoke_client_cert (Spoke cluster)
-```
+---
 
 ## RBAC Architecture
 
-### Hub Principal Permissions
+**Hub Principal Permissions**:
+- ClusterRole: Read Applications across all spoke namespaces
+- Role (argocd namespace): Full access to core ArgoCD resources
+- Role (each spoke namespace): Read/update Applications
 
-```yaml
-# ClusterRole for cross-namespace access
-apiVersion: rbac.authorization.k8s.io/v1
-kind: ClusterRole
-metadata:
-  name: argocd-agent-principal
-rules:
-- apiGroups: ["argoproj.io"]
-  resources: ["applications", "applicationsets", "appprojects"]
-  verbs: ["get", "list", "watch", "update", "patch"]
+**Spoke Agent Permissions**:
+- Role (argocd namespace): Full access to local ArgoCD resources
 
-# Role in core argocd namespace (full access)
+See [RBAC Guide](argocd-agent-rbac.md) for detailed policies and Keycloak integration.
+
 ---
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: argocd-agent-principal-core
-  namespace: argocd
-rules:
-- apiGroups: ["*"]
-  resources: ["*"]
-  verbs: ["*"]
-
-# Role in each spoke management namespace
----
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: argocd-agent-principal
-  namespace: spoke-01-mgmt
-rules:
-- apiGroups: ["argoproj.io"]
-  resources: ["applications"]
-  verbs: ["get", "list", "watch", "update", "patch"]
-```
-
-### Spoke Agent Permissions (Pattern 1)
-
-```yaml
-# Role in spoke argocd namespace (full access)
-apiVersion: rbac.authorization.k8s.io/v1
-kind: Role
-metadata:
-  name: argocd-agent
-  namespace: argocd
-rules:
-- apiGroups: ["*"]
-  resources: ["*"]
-  verbs: ["*"]
-```
 
 ## Deployment Modes
 
 | Mode | Hub | Spoke | Use Case |
 |------|-----|-------|----------|
-| **Full** | ✅ | ✅ | Complete Hub-and-Spoke setup |
-| **Hub-only** | ✅ | ❌ | Setup control plane first |
-| **Spoke-only** | ❌ | ✅ | Add spoke to existing Hub |
+| **Full** | Yes | Yes | Complete hub-and-spoke setup |
+| **Hub-only** | Yes | No | Setup control plane first |
+| **Spoke-only** | No | Yes | Add spoke to existing hub |
 
-### Terraform Deployment Mode Control
-
+**Terraform Control**:
 ```hcl
-# Full deployment
-deploy_hub = true
-deploy_spoke = true
-
-# Hub-only deployment
-deploy_hub = true
-deploy_spoke = false
-
-# Spoke-only deployment
-deploy_hub = false
-deploy_spoke = true
+deploy_hub = true    # Deploy hub components
+deploy_spokes = true # Deploy spoke agents
 ```
 
-**Conditional Resources**:
-- PKI resources created only when needed
-- Provider aliases conditional on deployment mode
-- Validation ensures required variables are set
+---
 
-## Scalability Considerations
+## Scalability
 
-### Single Hub Limits
+### Single Hub Capacity
 
 | Resource | Recommended | Maximum |
 |----------|-------------|---------|
@@ -332,15 +228,13 @@ deploy_spoke = true
 
 ### Scaling Strategies
 
-**Vertical Scaling**:
-- Increase Principal replica count
-- Enable Redis HA mode (3+ replicas)
-- Increase resources on Principal pods
+**Vertical**: Increase Principal replicas (2-3), enable Redis HA (3 replicas)
 
-**Horizontal Scaling**:
-- Multiple Hubs for isolation (dev/staging/prod)
-- Regional Hubs for geographic distribution
-- Dedicated Hubs per team/organization
+**Horizontal**: Multiple Hubs for isolation (dev/staging/prod, per-region, per-team)
+
+See [Operations Guide](argocd-agent-operations.md#scaling-operations) for scaling procedures.
+
+---
 
 ## Security Model
 
@@ -355,26 +249,27 @@ deploy_spoke = true
 - mTLS prevents man-in-the-middle attacks
 - Unidirectional communication (Spoke→Hub only)
 - Least privilege RBAC
-- NetworkPolicies restrict pod communication
-- Application controller on Spoke (not Hub)
+- Application controller on spoke (not hub)
+- No cluster credentials stored on hub
 
-### Security Benefits over Centralized Model
+### Security Benefits vs Centralized ArgoCD
 
 | Aspect | Centralized | Hub-and-Spoke |
 |--------|-------------|---------------|
-| Hub compromise impact | All clusters | No cluster access |
-| Spoke compromise impact | All clusters | Single spoke |
-| Credentials storage | Hub has all | Hub has none |
+| Hub compromise impact | All clusters accessible | No cluster access |
+| Spoke compromise impact | All clusters at risk | Single spoke only |
+| Credentials storage | Hub has all cluster credentials | Hub has none |
 | Network exposure | Hub→All spokes | Spoke→Hub only |
-| Attack surface | High | Reduced |
 
-## Monitoring and Observability
+---
+
+## Monitoring
 
 ### Metrics Endpoints
 
 **Hub Principal**:
 - Port: 8080
-- Path: `/metrix`
+- Path: `/metrics`
 - Metrics: gRPC connections, Application sync stats
 
 **Spoke Agent**:
@@ -382,34 +277,38 @@ deploy_spoke = true
 - Path: `/metrics`
 - Metrics: Connection health, sync latency
 
-### Health Checks
-
-**Principal Health**:
+**Health Checks**:
 ```bash
-kubectl exec -n argocd deployment/argocd-agent-principal -- \
-  curl localhost:8080/healthz
+# Principal
+kubectl exec -n argocd deployment/argocd-agent-principal -- curl localhost:8080/healthz
+
+# Agent
+kubectl exec -n argocd deployment/argocd-agent -- curl localhost:8080/healthz
 ```
 
-**Agent Health**:
-```bash
-kubectl exec -n argocd deployment/argocd-agent -- \
-  curl localhost:8080/healthz
-```
+See [Operations Guide](argocd-agent-operations.md#monitoring) for Prometheus configuration and alerting rules.
 
-### Logging
+---
 
-**Principal Logs**:
-```bash
-kubectl logs -n argocd -l app.kubernetes.io/name=argocd-agent-principal
-```
+## Decision: When to Use ArgoCD Agent?
 
-**Agent Logs**:
-```bash
-kubectl logs -n argocd -l app.kubernetes.io/name=argocd-agent
-```
+**Use Agent (Hub-Spoke)** when:
+- Managing 5+ clusters across networks/clouds
+- Clusters behind NAT/firewalls need centralized GitOps
+- Need local repo servers per cluster for compliance
+- Require security isolation between hub and workload clusters
 
-## References
+**Use Standard ArgoCD** when:
+- < 5 clusters in same VPC with full mesh connectivity
+- Need full UI features (terminal, pod logs, tree view)
+- Operational simplicity prioritized over security isolation
 
-- [Argo CD Agent Documentation](https://argo-cd.readthedocs.io/en/stable/operator-manual/agent/)
-- [Argo CD Architecture](https://argo-cd.readthedocs.io/en/stable/operator-manual/architecture/)
-- [Terraform TLS Provider](https://registry.terraform.io/providers/hashicorp/tls/latest/docs)
+---
+
+**Related Guides**:
+- [Deployment](argocd-agent-terraform-deployment.md) - Initial setup
+- [Configuration](argocd-agent-configuration.md) - All Terraform variables
+- [Operations](argocd-agent-operations.md) - Day-2 operations, scaling, certificates
+- [RBAC](argocd-agent-rbac.md) - Keycloak SSO and permissions
+- [Troubleshooting](argocd-agent-troubleshooting.md) - Issue resolution
+- [Argo CD Agent Docs](https://argo-cd.readthedocs.io/en/stable/operator-manual/agent/)

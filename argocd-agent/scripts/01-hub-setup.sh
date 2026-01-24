@@ -7,8 +7,21 @@
 
 set -e
 
-export HUB_CTX="gke_observe-472521_europe-west3_observe-prod-cluster"
-VERSION="v0.5.3"
+# Configuration
+HUB_CTX="${HUB_CTX:-}"
+VERSION="${VERSION:-v0.5.3}"
+
+# Usage
+if [ -z "$HUB_CTX" ]; then
+  echo "Usage: HUB_CTX=<context> [VERSION=v0.5.3] $0"
+  echo ""
+  echo "Example:"
+  echo "  HUB_CTX=gke_project_region_cluster VERSION=v0.5.3 $0"
+  echo ""
+  echo "Available contexts:"
+  kubectl config get-contexts -o name
+  exit 1
+fi
 
 echo "════════════════════════════════════════════════"
 echo "  Step 1: Control Plane Setup"

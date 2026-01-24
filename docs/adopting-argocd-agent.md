@@ -308,7 +308,7 @@ terraform apply -target=null_resource.hub_apps_any_namespace -target=null_resour
 
 1. **Monitor**: Watch agent connections and application sync status
 2. **Documentation**: Update your runbooks with Terraform commands
-3. **Certificate Rotation**: Plan certificate rotation schedule (see [argocd-agent-pki-management.md](argocd-agent-pki-management.md))
+3. **Certificate Rotation**: Plan certificate rotation schedule (see [Operations: Certificate Rotation](argocd-agent-operations.md#certificate-rotation))
 4. **Scaling**: Add more spokes using Terraform (see [argocd-agent-terraform-deployment.md](argocd-agent-terraform-deployment.md#multi-spoke-scaling))
 
 ---
@@ -317,5 +317,5 @@ terraform apply -target=null_resource.hub_apps_any_namespace -target=null_resour
 
 - [Architecture](argocd-agent-architecture.md)
 - [Terraform Deployment](argocd-agent-terraform-deployment.md)
-- [PKI Management](argocd-agent-pki-management.md)
+- [Operations Guide](argocd-agent-operations.md) - Certificate management, scaling, teardown
 - [Troubleshooting](argocd-agent-troubleshooting.md)

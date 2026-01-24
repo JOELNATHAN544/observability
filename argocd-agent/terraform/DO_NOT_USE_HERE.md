@@ -1,4 +1,4 @@
-# ⚠️ IMPORTANT: Do Not Use This Directory Directly
+# IMPORTANT: Do Not Use This Directory Directly
 
 This root `terraform/` directory is **NOT** used for deployments.
 
@@ -17,10 +17,10 @@ terraform apply
 
 The modular environment structure provides:
 
-- ✅ **Separation of Concerns**: Hub and spoke modules are reusable
-- ✅ **Environment Isolation**: Dev, staging, prod can coexist
-- ✅ **Better State Management**: Each environment has its own state
-- ✅ **Cleaner Workspaces**: No root-level state files or lock files
+- **Separation of Concerns**: Hub and spoke modules are reusable
+- **Environment Isolation**: Dev, staging, prod can coexist
+- **Better State Management**: Each environment has its own state
+- **Cleaner Workspaces**: No root-level state files or lock files
 
 ## Directory Contents
 

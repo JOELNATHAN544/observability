@@ -6,8 +6,22 @@
 
 set -e
 
-SPOKE_CTX="${1:-spoke}"
-VERSION="v0.5.3"
+# Configuration
+SPOKE_CTX="${1:-}"
+VERSION="${VERSION:-v0.5.3}"
+
+# Usage
+if [ -z "$SPOKE_CTX" ]; then
+  echo "Usage: [VERSION=v0.5.3] $0 <spoke-context>"
+  echo ""
+  echo "Example:"
+  echo "  $0 gke_project_region_spoke1"
+  echo "  VERSION=v0.5.4 $0 gke_project_region_spoke1"
+  echo ""
+  echo "Available contexts:"
+  kubectl config get-contexts -o name
+  exit 1
+fi
 
 echo "════════════════════════════════════════════════"
 echo "  Step 3: Workload Cluster Setup"

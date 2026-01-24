@@ -16,11 +16,28 @@
 
 set -e
 
-export HUB_CTX="gke_observe-472521_europe-west3_observe-prod-cluster"
-AGENT_NAME="${1:-my-first-agent}"
-SPOKE_CTX="${2:-spoke}"
-VERSION="v0.5.3"
+# Configuration
+HUB_CTX="${HUB_CTX:-}"
+AGENT_NAME="${1:-}"
+SPOKE_CTX="${2:-}"
+VERSION="${VERSION:-v0.5.3}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+# Usage
+if [ -z "$HUB_CTX" ] || [ -z "$AGENT_NAME" ] || [ -z "$SPOKE_CTX" ]; then
+  echo "Usage: HUB_CTX=<hub-context> $0 <agent-name> <spoke-context>"
+  echo ""
+  echo "Example:"
+  echo "  HUB_CTX=gke_proj_region_hub $0 agent-1 gke_proj_region_spoke1"
+  echo ""
+  echo "Environment variables:"
+  echo "  HUB_CTX    - Hub cluster kubectl context (required)"
+  echo "  VERSION    - ArgoCD version (default: v0.5.3)"
+  echo ""
+  echo "Available contexts:"
+  kubectl config get-contexts -o name
+  exit 1
+fi
 
 echo "════════════════════════════════════════════════"
 echo "  Step 4: Connect Agent ($AGENT_NAME -> $SPOKE_CTX)"
