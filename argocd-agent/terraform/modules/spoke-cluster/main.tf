@@ -69,7 +69,7 @@ resource "null_resource" "spoke_argocd_installation" {
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
     environment = {
-      GIT_HTTP_USER_AGENT = "kubectl-kustomize"
+      GIT_HTTP_USER_AGENT   = "kubectl-kustomize"
       GIT_CONFIG_PARAMETERS = "'http.lowSpeedLimit=1000' 'http.lowSpeedTime=600'"
     }
     command = <<-EOT

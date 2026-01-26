@@ -109,7 +109,7 @@ locals {
   # =============================================================================
   # KEYCLOAK ADMIN USER
   # =============================================================================
-  
+
   # Admin password - use provided password or random password if not set
   admin_password = var.default_admin_password != "" ? var.default_admin_password : (
     var.create_default_admin_user ? random_password.keycloak_admin_password[0].result : ""

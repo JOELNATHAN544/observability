@@ -26,7 +26,7 @@ resource "helm_release" "nginx_ingress" {
   create_namespace = true
   version          = var.nginx_ingress_version
 
-  set  {
+  set {
     name  = "controller.replicaCount"
     value = var.replica_count
   }
@@ -44,7 +44,7 @@ resource "helm_release" "nginx_ingress" {
   set {
     name  = "controller.ingressClassResource.controllerValue"
     value = "k8s.io/${var.ingress_class_name}"
-   }
+  }
   set {
     name  = "controller.ingressClassResource.enabled"
     value = "true"
@@ -54,7 +54,7 @@ resource "helm_release" "nginx_ingress" {
     name  = "controller.ingressClassByName"
     value = "true"
   }
- 
+
 
   # Wait for the LoadBalancer to be ready
   wait    = true

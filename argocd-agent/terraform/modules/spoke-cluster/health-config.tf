@@ -42,8 +42,8 @@ resource "null_resource" "spoke_argocd_resource_health_config" {
   depends_on = [null_resource.spoke_argocd_installation]
 
   triggers = {
-    config_version = "v1"
+    config_version  = "v1"
     cluster_context = each.value
-    agent_name = each.key
+    agent_name      = each.key
   }
 }

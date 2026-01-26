@@ -1304,7 +1304,7 @@ resource "null_resource" "set_admin_password" {
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
-    command = <<-EOT
+    command     = <<-EOT
       set -e
       
       USER_ID="${keycloak_user.argocd_admin[0].id}"
@@ -1373,11 +1373,11 @@ resource "null_resource" "set_admin_password" {
   }
 
   depends_on = [keycloak_user.argocd_admin]
-  
+
   triggers = {
-    user_id   = keycloak_user.argocd_admin[0].id
-    password  = md5(local.admin_password)
-    temporary = var.default_admin_password_temporary
+    user_id      = keycloak_user.argocd_admin[0].id
+    password     = md5(local.admin_password)
+    temporary    = var.default_admin_password_temporary
     keycloak_url = var.keycloak_url
   }
 }
