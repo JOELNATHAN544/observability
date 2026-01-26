@@ -1288,13 +1288,14 @@ resource "random_password" "keycloak_admin_password" {
 }
 
 resource "keycloak_user" "argocd_admin" {
-  count      = var.deploy_hub && var.enable_keycloak && var.create_default_admin_user ? 1 : 0
-  realm_id   = keycloak_realm.argocd[0].id
-  username   = var.default_admin_username
-  enabled    = true
-  email      = var.default_admin_email
-  first_name = "ArgoCD"
-  last_name  = "Administrator"
+  count          = var.deploy_hub && var.enable_keycloak && var.create_default_admin_user ? 1 : 0
+  realm_id       = keycloak_realm.argocd[0].id
+  username       = var.default_admin_username
+  enabled        = true
+  email          = var.default_admin_email
+  email_verified = true
+  first_name     = "ArgoCD"
+  last_name      = "Administrator"
 }
 
 # Set password for admin user via Keycloak REST API

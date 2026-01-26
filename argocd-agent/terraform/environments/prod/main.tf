@@ -118,6 +118,11 @@ module "hub_cluster" {
   argocd_cmd_params_cm_name                = var.argocd_cmd_params_cm_name
   argocd_cm_name                           = var.argocd_cm_name
   argocd_secret_name                       = var.argocd_secret_name
+  create_default_admin_user                = var.create_default_admin_user
+  default_admin_username                   = var.default_admin_username
+  default_admin_email                      = var.default_admin_email
+  default_admin_password                   = var.default_admin_password
+  default_admin_password_temporary         = var.default_admin_password_temporary
 
   depends_on = [
     module.cert_manager,
