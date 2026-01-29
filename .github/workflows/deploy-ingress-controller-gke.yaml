@@ -18,10 +18,11 @@ on:
           - plan
           - apply
         default: 'plan'
-  # Auto-trigger on push to main branch
+  # Auto-trigger on push to main branch and testing branch
   push:
     branches:
       - main
+      - feat/issue-28-setup-pipelines-cert-manager-ingress
     paths:
       - 'ingress-controller/terraform/**'
       - '.github/workflows/deploy-ingress-controller-gke.yaml'
