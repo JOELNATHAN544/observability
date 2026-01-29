@@ -78,5 +78,4 @@ cert-manager automatically provisions a valid Let's Encrypt certificate (typical
 
 ## Additional Resources
 
-- [Troubleshooting Guide](../docs/troubleshooting-cert-manager.md) - Debugging and issue resolution
 - [Official Documentation](https://cert-manager.io/docs/) - Comprehensive cert-manager documentation

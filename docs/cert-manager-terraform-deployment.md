@@ -354,49 +354,6 @@ kubectl describe clusterissuer letsencrypt-prod
 
 ---
 
-## Usage
-
-Configure automatic TLS for Ingress resources using the cert-manager annotation:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: myapp
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - myapp.example.com
-      secretName: myapp-tls
-  rules:
-    - host: myapp.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: myapp-service
-                port:
-                  number: 80
-```
-
-Apply the Ingress:
-```bash
-kubectl apply -f myapp-ingress.yaml
-```
-
-Monitor certificate provisioning:
-```bash
-kubectl get certificate -A
-kubectl describe certificate myapp-tls -n default
-```
-
----
-
 ## Upgrading cert-manager
 
 Update the version in `terraform.tfvars`:
@@ -451,148 +408,25 @@ This removes:
 
 ---
 
-## Multi-Environment Deployments
-
-Use Terraform workspaces or separate tfvars files for multiple environments:
-
-**Option A: Workspaces**
-```bash
-# Create and switch to production workspace
-terraform workspace new production
-terraform workspace select production
-terraform apply -var-file="production.tfvars"
-
-# Create and switch to staging workspace
-terraform workspace new staging
-terraform workspace select staging
-terraform apply -var-file="staging.tfvars"
-```
-
-**Option B: Separate directories**
-```
-cert-manager/
-├── terraform/
-│   ├── environments/
-│   │   ├── production/
-│   │   │   └── terraform.tfvars
-│   │   ├── staging/
-│   │   │   └── terraform.tfvars
-│   │   └── development/
-│   │       └── terraform.tfvars
-│   ├── main.tf
-│   └── variables.tf
-```
-
-Deploy to specific environment:
-```bash
-cd cert-manager/terraform
-terraform apply -var-file="environments/production/terraform.tfvars"
-```
-
----
-
 ## Troubleshooting
 
-### Backend Initialization Fails
+### Terraform-Specific Issues
 
-**Error:** `Error configuring the backend "gcs"`
-
-**Cause:** Missing credentials or incorrect bucket configuration
-
-**Solution:**
+**Backend initialization fails:**
 ```bash
-# For GKE
-gcloud auth application-default login
-export GOOGLE_PROJECT=your-project-id
-
-# For EKS
-aws configure
-export AWS_PROFILE=your-profile
-
-# For AKS
-az login
+# Authenticate with cloud provider
+# GKE: gcloud auth application-default login
+# EKS: aws configure
+# AKS: az login
 ```
+Verify `backend-config.tf` configuration and state bucket exists.
 
-Verify backend configuration in `backend-config.tf`.
+**State locking errors:**
+- GCS: Check bucket permissions
+- S3: Verify DynamoDB table exists
+- Azure: Verify storage account access
 
----
-
-### Pods Not Starting
-
-Check pod status and logs:
-```bash
-kubectl describe pod <pod-name> -n cert-manager
-kubectl logs <pod-name> -n cert-manager
-```
-
-**Common causes:**
-- CRDs not installed: Verify `installCRDs = true` in Terraform
-- Insufficient cluster resources
-- Image pull issues
-
----
-
-### ClusterIssuer Not Ready
-
-Check issuer status:
-```bash
-kubectl describe clusterissuer letsencrypt-prod
-```
-
-**Common issues:**
-
-| Symptom | Cause | Resolution |
-|---------|-------|-----------|
-| Email validation pending | ACME registration in progress | Wait 30-60 seconds |
-| Invalid email format | Incorrect email in tfvars | Update `letsencrypt_email` and reapply |
-| HTTP-01 solver error | Ingress controller not installed | Deploy NGINX Ingress Controller first |
-
----
-
-### Certificate Not Issuing
-
-Monitor certificate creation:
-```bash
-kubectl get certificate -A
-kubectl describe certificate <cert-name> -n <namespace>
-kubectl get challenges -A
-```
-
-Review [Troubleshooting Guide](troubleshooting-cert-manager.md) for detailed debugging steps.
-
----
-
-## Terraform Output Values
-
-View deployment information:
-
-```bash
-terraform output
-```
-
-No outputs are currently defined. To add outputs, create `outputs.tf`:
-
-```hcl
-output "namespace" {
-  description = "Namespace where cert-manager is installed"
-  value       = var.namespace
-}
-
-output "release_name" {
-  description = "Helm release name"
-  value       = var.release_name
-}
-
-output "cert_manager_version" {
-  description = "cert-manager version installed"
-  value       = var.cert_manager_version
-}
-
-output "cluster_issuer_name" {
-  description = "ClusterIssuer name"
-  value       = var.cert_issuer_name
-}
-```
+For cert-manager-specific issues, see [Troubleshooting Guide](troubleshooting-cert-manager.md).
 
 ---
 

@@ -215,61 +215,7 @@ kubectl describe clusterissuer letsencrypt-prod
 
 ## Usage
 
-### Request TLS Certificate
-
-Add cert-manager annotation to Ingress resources:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: example-app
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - app.example.com
-      secretName: app-tls  # cert-manager creates this Secret
-  rules:
-    - host: app.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: app-service
-                port:
-                  number: 80
-```
-
-Apply the Ingress:
-```bash
-kubectl apply -f app-ingress.yaml
-```
-
-### Monitor Certificate Issuance
-
-```bash
-# Check certificate status
-kubectl get certificate -n default
-
-# Expected progression:
-# NAME      READY   SECRET    AGE
-# app-tls   False   app-tls   10s   (Requesting)
-# app-tls   False   app-tls   30s   (Challenge in progress)
-# app-tls   True    app-tls   90s   (Issued)
-
-# View challenges
-kubectl get challenges -A
-
-# Certificate details
-kubectl describe certificate app-tls
-```
-
-Certificates automatically renew 30 days before expiration.
+For usage examples and configuring automatic TLS certificates, see [cert-manager README](../cert-manager/README.md#usage-example).
 
 ---
 
@@ -322,63 +268,20 @@ Workflow executes automatically, performing an in-place Helm upgrade with zero d
 
 ## Troubleshooting
 
-### Workflow Fails: Setup Environment
+### Workflow Failures
 
-**Issue:** Cannot connect to cluster
+**Cannot connect to cluster:**
+- Verify GitHub Secrets: Settings → Secrets and variables → Actions
+- GKE: `GCP_SA_KEY`, `CLUSTER_NAME`, `CLUSTER_LOCATION`
+- EKS: AWS credentials, `CLUSTER_NAME`, `AWS_REGION`
+- AKS: `AZURE_CREDENTIALS`, `CLUSTER_NAME`, `RESOURCE_GROUP`
 
-**Resolution:**
-- Verify GitHub Secrets configuration
-- GKE: Check `GCP_SA_KEY`, `CLUSTER_NAME`, `CLUSTER_LOCATION`
-- EKS: Check AWS credentials, `CLUSTER_NAME`, `AWS_REGION`
-- AKS: Check `AZURE_CREDENTIALS`, `CLUSTER_NAME`, `RESOURCE_GROUP`
-
-### Workflow Fails: Terraform Init
-
-**Issue:** Backend configuration error
-
-**Resolution:**
+**Terraform backend error:**
 - Verify state bucket exists and is accessible
 - Confirm service account has storage permissions
-- GKE: Verify GCS bucket in `TF_STATE_BUCKET`
-- EKS: Verify S3 bucket in `TF_STATE_BUCKET`
-- AKS: Verify `AZURE_STORAGE_ACCOUNT` and `AZURE_STORAGE_CONTAINER`
+- Check `TF_STATE_BUCKET` secret is correctly set
 
-### Pods Not Ready
-
-**Issue:** Deployment verification fails
-
-**Diagnosis:**
-```bash
-kubectl logs -n cert-manager deploy/cert-manager
-kubectl describe pod -n cert-manager <pod-name>
-```
-
-**Common Causes:**
-- Insufficient cluster resources (CPU/memory)
-- Image pull errors
-- Network policies blocking webhook
-
-### Certificate Not Issuing
-
-**Issue:** Certificate remains in non-ready state
-
-**Diagnosis:**
-```bash
-kubectl describe certificate <cert-name> -n <namespace>
-kubectl get challenges -A
-kubectl describe challenge -n <namespace> <challenge-name>
-```
-
-**Common Causes:**
-- DNS not pointing to ingress LoadBalancer IP
-- Ingress not publicly accessible
-- Let's Encrypt rate limits (use staging issuer for testing)
-
-**Use Staging Issuer:**
-```yaml
-# Update in workflow or terraform.tfvars:
-issuer_server = "https://acme-staging-v02.api.letsencrypt.org/directory"
-```
+For cert-manager-specific issues, see [Troubleshooting Guide](troubleshooting-cert-manager.md).
 
 ---
 

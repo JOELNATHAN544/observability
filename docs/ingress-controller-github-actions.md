@@ -247,66 +247,7 @@ The `EXTERNAL-IP` field contains the public IP address for routing external traf
 
 ## Usage
 
-Create an Ingress resource to route traffic to your services:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: my-app-ingress
-  namespace: default
-spec:
-  ingressClassName: nginx
-  rules:
-    - host: myapp.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: myapp-service
-                port:
-                  number: 80
-```
-
-Apply the Ingress:
-```bash
-kubectl apply -f myapp-ingress.yaml
-```
-
-Configure DNS:
-```bash
-# Get the LoadBalancer IP
-EXTERNAL_IP=$(kubectl get svc -n ingress-nginx \
-  nginx-monitoring-ingress-nginx-controller \
-  -o jsonpath='{.status.loadBalancer.ingress[0].ip}')
-
-echo "Point myapp.example.com to $EXTERNAL_IP"
-```
-
-Create DNS A record:
-- `myapp.example.com` → `<EXTERNAL_IP>`
-
-Test the configuration:
-```bash
-curl http://myapp.example.com
-```
-
-### TLS Configuration
-
-For automatic TLS certificate management, deploy cert-manager ([deployment guide](cert-manager-github-actions.md)) and configure the Ingress:
-
-```yaml
-metadata:
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-spec:
-  tls:
-    - hosts:
-        - myapp.example.com
-      secretName: myapp-tls
-```
+For usage examples and Ingress configuration, see [NGINX Ingress Controller README](../ingress-controller/README.md#usage-examples).
 
 ---
 
@@ -367,126 +308,20 @@ To remove the ingress controller:
 
 ## Troubleshooting
 
-### Workflow Fails at Setup Environment
+### Workflow Failures
 
-**Symptom:** Cannot connect to cluster
+**Cannot connect to cluster:**
+- Verify GitHub Secrets: Settings → Secrets and variables → Actions
+- GKE: `GCP_SA_KEY`, `CLUSTER_NAME`, `CLUSTER_LOCATION`
+- EKS: `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `CLUSTER_NAME`, `AWS_REGION`
+- AKS: `AZURE_CREDENTIALS`, `CLUSTER_NAME`, `AZURE_RESOURCE_GROUP`
 
-**Resolution:**
+**Terraform backend error:**
+- Verify state bucket exists and is accessible
+- Confirm service account has storage permissions
+- Check `TF_STATE_BUCKET` secret is correctly set
 
-Verify GitHub Secrets are configured correctly:
-- **GKE:** Check `GCP_SA_KEY`, `CLUSTER_NAME`, `CLUSTER_LOCATION`
-- **EKS:** Check `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `CLUSTER_NAME`, `AWS_REGION`
-- **AKS:** Check `AZURE_CREDENTIALS`, `CLUSTER_NAME`, `AZURE_RESOURCE_GROUP`
-
-Test cluster access manually:
-
-```bash
-# GKE
-gcloud container clusters get-credentials CLUSTER_NAME --zone ZONE --project PROJECT
-
-# EKS
-aws eks update-kubeconfig --name CLUSTER_NAME --region REGION
-
-# AKS
-az aks get-credentials --name CLUSTER_NAME --resource-group RG
-
-kubectl cluster-info
-```
-
----
-
-### Workflow Fails at Terraform Init
-
-**Symptom:** Backend configuration error
-
-**Resolution:**
-
-Verify state storage bucket exists:
-
-```bash
-# GKE
-gsutil ls gs://TF_STATE_BUCKET
-
-# EKS
-aws s3 ls s3://TF_STATE_BUCKET
-
-# AKS
-az storage container show --name CONTAINER --account-name ACCOUNT
-```
-
-Confirm service account has storage permissions.
-
----
-
-### External IP Stuck in Pending
-
-**Symptom:** LoadBalancer service shows `<pending>` indefinitely
-
-**Check cloud provider quotas:**
-
-```bash
-# GKE
-gcloud compute project-info describe --project=PROJECT_ID
-
-# EKS
-# Check AWS service quotas for Elastic IPs in console
-
-# AKS
-az vm list-usage --location REGION
-```
-
-**Common causes:**
-- Exceeded cloud provider IP quota
-- Insufficient IAM permissions to create load balancer
-- Network firewall rules blocking load balancer provisioning
-
----
-
-### Ingress Returns 404 Not Found
-
-**Symptom:** External IP accessible but all requests return 404
-
-**Diagnostic commands:**
-
-```bash
-# Check Ingress exists
-kubectl get ingress -A
-
-# Verify Ingress configuration
-kubectl describe ingress <name> -n <namespace>
-
-# Confirm backend service exists
-kubectl get svc <backend-service> -n <namespace>
-
-# Check service endpoints (pod IPs)
-kubectl get endpoints <backend-service> -n <namespace>
-
-# Review ingress controller logs
-kubectl logs -n ingress-nginx deploy/nginx-monitoring-ingress-nginx-controller
-```
-
-**Common causes:**
-- IngressClass mismatch (verify `ingressClassName: nginx`)
-- Backend service missing or has no endpoints
-- DNS points to incorrect IP address
-
----
-
-### Ingress Returns 503 Service Unavailable
-
-**Symptom:** Ingress routes traffic but backend is unavailable
-
-**Resolution:**
-
-```bash
-# Check backend pod status
-kubectl get pods -n <namespace>
-
-# Verify service endpoints
-kubectl get endpoints <service> -n <namespace>
-```
-
-**Common cause:** No healthy backend pods
+For ingress-specific issues, see [Troubleshooting Guide](troubleshooting-ingress-controller.md).
 
 ---
 

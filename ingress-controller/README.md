@@ -162,5 +162,4 @@ After deploying the ingress controller:
 
 ## Additional Resources
 
-- [Troubleshooting Guide](../docs/troubleshooting-ingress-controller.md) - Debugging and issue resolution
 - [Official Documentation](https://kubernetes.github.io/ingress-nginx/) - Comprehensive NGINX Ingress documentation

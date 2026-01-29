@@ -206,111 +206,7 @@ kubectl describe clusterissuer letsencrypt-prod
 
 ## Usage
 
-Once the ClusterIssuer is ready, cert-manager can issue certificates automatically.
-
-### Method 1: Ingress Annotation (Recommended)
-
-Add the cert-manager annotation to your Ingress resource:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: my-app-ingress
-  namespace: default
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - myapp.example.com
-      secretName: myapp-tls
-  rules:
-    - host: myapp.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: myapp-service
-                port:
-                  number: 80
-```
-
-Apply the Ingress:
-```bash
-kubectl apply -f myapp-ingress.yaml
-```
-
-**Automated certificate lifecycle:**
-1. cert-manager detects the annotation
-2. Creates a Certificate resource automatically
-3. Requests certificate from Let's Encrypt via HTTP-01 challenge
-4. Stores issued certificate in `myapp-tls` Secret
-5. Ingress uses the Secret for TLS termination
-6. Automatic renewal 30 days before expiration
-
----
-
-### Method 2: Manual Certificate Resource
-
-For explicit control, create a Certificate resource directly:
-
-```yaml
-apiVersion: cert-manager.io/v1
-kind: Certificate
-metadata:
-  name: myapp-certificate
-  namespace: default
-spec:
-  secretName: myapp-tls
-  issuerRef:
-    name: letsencrypt-prod
-    kind: ClusterIssuer
-  dnsNames:
-    - myapp.example.com
-    - www.myapp.example.com
-```
-
-```bash
-kubectl apply -f myapp-certificate.yaml
-```
-
----
-
-### Monitor Certificate Status
-
-Watch certificate creation progress:
-
-```bash
-kubectl get certificate -n default
-```
-
-Typical progression:
-```
-NAME                READY   SECRET       AGE
-myapp-certificate   False   myapp-tls    10s   # Requesting
-myapp-certificate   False   myapp-tls    30s   # HTTP-01 challenge in progress
-myapp-certificate   True    myapp-tls    90s   # Issued
-```
-
-Check detailed status:
-```bash
-kubectl describe certificate myapp-certificate -n default
-```
-
-View HTTP-01 challenges:
-```bash
-kubectl get challenges -A
-kubectl describe challenge <challenge-name> -n default
-```
-
-Inspect the issued certificate Secret:
-```bash
-kubectl get secret myapp-tls -n default -o yaml
-```
+For usage examples and configuring automatic TLS certificates, see [cert-manager README](../cert-manager/README.md#usage-example).
 
 ---
 
@@ -362,85 +258,14 @@ kubectl delete crd orders.acme.cert-manager.io
 
 ## Troubleshooting
 
-### Pods Not Starting
+For detailed troubleshooting, see [Troubleshooting Guide](troubleshooting-cert-manager.md).
 
-Check pod status and logs:
-
+**Quick verification:**
 ```bash
-kubectl describe pod <pod-name> -n cert-manager
-kubectl logs <pod-name> -n cert-manager
-```
-
-**Common causes:**
-- CRDs not installed: Verify with `kubectl get crd | grep cert-manager`
-- Insufficient cluster resources: Check node capacity
-- Image pull issues: Verify image pull policy and credentials
-
----
-
-### Certificate Not Issuing
-
-Check certificate status:
-
-```bash
+kubectl get pods -n cert-manager
+kubectl get certificate -A
 kubectl describe certificate <cert-name> -n <namespace>
 ```
-
-Review the "Events" section for cert-manager activity.
-
-**Common issues:**
-
-| Symptom | Cause | Resolution |
-|---------|-------|------------|
-| "Waiting for HTTP-01 challenge" | Ingress not publicly accessible | Verify DNS points to LoadBalancer IP |
-| "Challenge failed" | ACME server cannot reach cluster | Check firewall rules, verify port 80 is open |
-| "Rate limit exceeded" | Too many certificate requests | Use staging issuer for testing |
-| "Invalid email" | Incorrect email format in ClusterIssuer | Update email and reapply ClusterIssuer |
-
----
-
-### Challenge Stuck or Failing
-
-Check challenge details:
-
-```bash
-kubectl get challenges -A
-kubectl describe challenge <challenge-name> -n <namespace>
-```
-
-Verify ingress is publicly accessible:
-
-```bash
-# Get LoadBalancer IP
-kubectl get svc -n ingress-nginx
-
-# Test HTTP-01 challenge URL
-curl -v http://yourdomain.com/.well-known/acme-challenge/test
-```
-
-Verify DNS resolution:
-```bash
-dig yourdomain.com
-nslookup yourdomain.com
-```
-
----
-
-### Rate Limits
-
-Let's Encrypt rate limits:
-- 50 certificates per registered domain per week
-- 5 duplicate certificates per week
-
-**Solution:** Use the staging issuer for testing:
-
-```yaml
-spec:
-  acme:
-    server: https://acme-staging-v02.api.letsencrypt.org/directory
-```
-
-**Note:** Staging certificates are not trusted by browsers but are suitable for testing.
 
 ---
 

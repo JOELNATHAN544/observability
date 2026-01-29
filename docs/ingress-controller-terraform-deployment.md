@@ -377,71 +377,6 @@ nslookup myapp.example.com
 
 ---
 
-## Usage
-
-Create Ingress resources to route traffic to your services.
-
-### Basic HTTP Routing
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: myapp-ingress
-spec:
-  ingressClassName: nginx
-  rules:
-    - host: myapp.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: myapp-service
-                port:
-                  number: 80
-```
-
-Apply the Ingress:
-```bash
-kubectl apply -f myapp-ingress.yaml
-```
-
-### HTTPS with Automatic TLS
-
-Configure TLS with cert-manager annotation:
-
-```yaml
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: myapp-ingress
-  annotations:
-    cert-manager.io/cluster-issuer: "letsencrypt-prod"
-spec:
-  ingressClassName: nginx
-  tls:
-    - hosts:
-        - myapp.example.com
-      secretName: myapp-tls
-  rules:
-    - host: myapp.example.com
-      http:
-        paths:
-          - path: /
-            pathType: Prefix
-            backend:
-              service:
-                name: myapp-service
-                port:
-                  number: 80
-```
-
-**Requires:** cert-manager deployed ([deployment guide](cert-manager-terraform-deployment.md))
-
----
-
 ## Upgrading NGINX Ingress Controller
 
 Update the version in `terraform.tfvars`:
@@ -517,180 +452,25 @@ This removes:
 
 ---
 
-## Multi-Environment Deployments
-
-Use Terraform workspaces or separate tfvars files for multiple environments:
-
-**Option A: Workspaces**
-```bash
-# Create and switch to production workspace
-terraform workspace new production
-terraform workspace select production
-terraform apply -var-file="production.tfvars"
-
-# Create and switch to staging workspace
-terraform workspace new staging
-terraform workspace select staging
-terraform apply -var-file="staging.tfvars"
-```
-
-**Option B: Separate directories**
-```
-ingress-controller/
-├── terraform/
-│   ├── environments/
-│   │   ├── production/
-│   │   │   └── terraform.tfvars
-│   │   ├── staging/
-│   │   │   └── terraform.tfvars
-│   │   └── development/
-│   │       └── terraform.tfvars
-│   ├── main.tf
-│   └── variables.tf
-```
-
-Deploy to specific environment:
-```bash
-cd ingress-controller/terraform
-terraform apply -var-file="environments/production/terraform.tfvars"
-```
-
----
-
 ## Troubleshooting
 
-### Backend Initialization Fails
+### Terraform-Specific Issues
 
-**Error:** `Error configuring the backend "gcs"`
-
-**Cause:** Missing credentials or incorrect bucket configuration
-
-**Solution:**
+**Backend initialization fails:**
 ```bash
-# For GKE
-gcloud auth application-default login
-export GOOGLE_PROJECT=your-project-id
-
-# For EKS
-aws configure
-export AWS_PROFILE=your-profile
-
-# For AKS
-az login
+# Authenticate with cloud provider
+# GKE: gcloud auth application-default login
+# EKS: aws configure
+# AKS: az login
 ```
+Verify `backend-config.tf` configuration and state bucket exists.
 
-Verify backend configuration in `backend-config.tf`.
+**State locking errors:**
+- GCS: Check bucket permissions
+- S3: Verify DynamoDB table exists
+- Azure: Verify storage account access
 
----
-
-### External IP Stuck in Pending
-
-Check service events:
-```bash
-kubectl describe svc -n ingress-nginx nginx-monitoring-ingress-nginx-controller
-```
-
-**Common causes:**
-
-| Cause | Resolution |
-|-------|-----------|
-| Cloud provider quota exceeded | Check external IP quota in cloud console |
-| Insufficient IAM permissions | Verify service account has LoadBalancer creation permission |
-| No LoadBalancer support | Install MetalLB for on-premise clusters |
-
-**For on-premise clusters**, install MetalLB:
-```bash
-helm repo add metallb https://metallb.github.io/metallb
-helm install metallb metallb/metallb --namespace metallb-system --create-namespace
-```
-
----
-
-### Pods Not Starting
-
-Check pod status and logs:
-```bash
-kubectl describe pod <pod-name> -n ingress-nginx
-kubectl logs <pod-name> -n ingress-nginx
-```
-
-**Common causes:**
-- Insufficient cluster resources
-- Image pull issues
-- Port conflicts
-
----
-
-### Ingress Returns 404 Not Found
-
-Check Ingress configuration:
-```bash
-kubectl get ingress -A
-kubectl describe ingress <ingress-name> -n <namespace>
-```
-
-**Common issues:**
-
-| Symptom | Cause | Resolution |
-|---------|-------|-----------|
-| No Ingress Address | Not associated with controller | Verify `ingressClassName: nginx` |
-| Backend service missing | Service doesn't exist | Check `kubectl get svc <service>` |
-| No endpoints | Pods not running | Check `kubectl get endpoints <service>` |
-
-Review [Troubleshooting Guide](troubleshooting-ingress-controller.md) for detailed debugging steps.
-
----
-
-## Terraform Output Values
-
-View deployment information:
-
-```bash
-terraform output
-```
-
-No outputs are currently defined. To add outputs, create `outputs.tf`:
-
-```hcl
-output "namespace" {
-  description = "Namespace where ingress controller is installed"
-  value       = var.namespace
-}
-
-output "release_name" {
-  description = "Helm release name"
-  value       = var.release_name
-}
-
-output "nginx_ingress_version" {
-  description = "NGINX Ingress Controller version installed"
-  value       = var.nginx_ingress_version
-}
-
-output "ingress_class_name" {
-  description = "IngressClass name"
-  value       = var.ingress_class_name
-}
-
-output "loadbalancer_ip" {
-  description = "LoadBalancer external IP address"
-  value       = var.install_nginx_ingress ? data.kubernetes_service.nginx_ingress[0].status[0].load_balancer[0].ingress[0].ip : null
-}
-```
-
-To enable LoadBalancer IP output, add data source to `main.tf`:
-```hcl
-data "kubernetes_service" "nginx_ingress" {
-  count = var.install_nginx_ingress ? 1 : 0
-
-  metadata {
-    name      = "${var.release_name}-ingress-nginx-controller"
-    namespace = var.namespace
-  }
-
-  depends_on = [helm_release.nginx_ingress]
-}
-```
+For ingress-specific issues, see [Troubleshooting Guide](troubleshooting-ingress-controller.md).
 
 ---
 
