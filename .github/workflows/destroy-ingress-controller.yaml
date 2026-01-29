@@ -23,6 +23,12 @@ on:
         description: 'Type "DESTROY" to confirm'
         required: true
         type: string
+  # Push trigger for testing branch (workflow registration only, destruction requires manual trigger)
+  push:
+    branches:
+      - feat/issue-28-setup-pipelines-cert-manager-ingress
+    paths:
+      - '.github/workflows/destroy-ingress-controller.yaml'
 
 # Global environment variables
 env:
@@ -33,9 +39,11 @@ env:
 jobs:
   # Job 1: Safety validation
   # Prevents accidental destruction by requiring exact confirmation string
+  # Only runs on manual workflow_dispatch events (not on push)
   validate-confirmation:
     name: Validate Destroy Confirmation
     runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch'
     steps:
       # Verify user typed "DESTROY" exactly (case-sensitive)
       # Workflow fails immediately if confirmation doesn't match
