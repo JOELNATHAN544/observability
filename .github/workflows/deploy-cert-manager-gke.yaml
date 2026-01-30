@@ -18,10 +18,10 @@ on:
           - plan
           - apply
         default: 'plan'
-  # Auto-trigger on push to main branch
+  # Auto-trigger on push to current branch (TEMPORARY FOR TESTING)
   push:
     branches:
-      - main
+      - feat/issue-28-setup-pipelines-cert-manager-ingress
     paths:
       - 'cert-manager/terraform/**'
       - '.github/workflows/deploy-cert-manager-gke.yaml'
