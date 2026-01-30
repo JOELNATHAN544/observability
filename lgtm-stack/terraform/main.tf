@@ -155,11 +155,6 @@ resource "google_service_account_iam_member" "workload_identity_binding" {
 
 # Cert-Manager Module
 module "cert_manager" {
-  providers = {
-    kubernetes = kubernetes
-    helm       = helm
-  }
-
   source = "../../cert-manager/terraform"
 
   install_cert_manager = var.install_cert_manager
