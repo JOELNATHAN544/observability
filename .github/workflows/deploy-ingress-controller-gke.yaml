@@ -25,16 +25,10 @@ on:
     paths:
       - 'ingress-controller/terraform/**'
       - '.github/workflows/deploy-ingress-controller-gke.yaml'
-  # Run plan on pull requests for review
-  pull_request:
-    paths:
-      - 'ingress-controller/terraform/**'
-      - '.github/workflows/deploy-ingress-controller-gke.yaml'
 
 # Required permissions for workflow operations
 permissions:
   contents: read           # Read repository content
-  pull-requests: write     # Comment Terraform plans on PRs
   id-token: write         # Google Cloud Workload Identity
 
 # Global environment variables used across all jobs
@@ -177,23 +171,6 @@ jobs:
             ${{ env.WORKING_DIR }}/plan.txt
           retention-days: 5
 
-      # Post plan output to pull request for review
-      # Truncate at 65000 chars to stay within GitHub comment size limit
-      - name: Comment PR with plan
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const plan = fs.readFileSync('${{ env.WORKING_DIR }}/plan.txt', 'utf8');
-            const truncatedPlan = plan.length > 65000 ? plan.substring(0, 65000) + '\n\n... (truncated)' : plan;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## Terraform Plan - ingress-controller (GKE)\n\`\`\`\n${truncatedPlan}\n\`\`\``
-            })
 
   # Job 2: Execute approved deployment and verify
   # Only runs on main branch pushes or manual apply trigger

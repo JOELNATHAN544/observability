@@ -25,16 +25,10 @@ on:
     paths:
       - 'cert-manager/terraform/**'
       - '.github/workflows/deploy-cert-manager-gke.yaml'
-  # Run plan on pull requests for review
-  pull_request:
-    paths:
-      - 'cert-manager/terraform/**'
-      - '.github/workflows/deploy-cert-manager-gke.yaml'
 
 # Required permissions for workflow operations
 permissions:
   contents: read           # Read repository content
-  pull-requests: write     # Comment Terraform plans on PRs
   id-token: write         # Google Cloud Workload Identity
 
 # Global environment variables used across all jobs
@@ -182,24 +176,6 @@ jobs:
             ${{ env.WORKING_DIR }}/plan.txt
           retention-days: 5
 
-      # Post Terraform plan summary as PR comment for review
-      # Only runs on pull_request events
-      - name: Comment PR with plan
-        if: github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs = require('fs');
-            const plan = fs.readFileSync('${{ env.WORKING_DIR }}/plan.txt', 'utf8');
-            // Keep only first 15000 chars to avoid overwhelming PR comments
-            const truncatedPlan = plan.length > 15000 ? plan.substring(0, 15000) + '\n\n... (truncated - see full plan in artifacts)' : plan;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: `## Terraform Plan - cert-manager (GKE)\n\`\`\`\n${truncatedPlan}\n\`\`\`\n\n📎 Full plan available in workflow artifacts for 5 days.`
-            })
 
   # Job 2: Apply Terraform plan and verify deployment
   # Only runs on: push to main OR manual workflow_dispatch with 'apply' action
