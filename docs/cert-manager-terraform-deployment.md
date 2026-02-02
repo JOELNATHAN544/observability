@@ -6,6 +6,8 @@ Recommended for teams using infrastructure as code workflows, multi-environment 
 
 **Official Documentation**: [cert-manager.io](https://cert-manager.io/docs/) | **GitHub**: [cert-manager/cert-manager](https://github.com/cert-manager/cert-manager) | **Version**: `v1.19.2`
 
+> **Already have cert-manager installed?** If you want to manage an existing cert-manager deployment with Terraform, see [Adopting Existing Installation](adopting-cert-manager.md).
+
 ---
 
 ## Prerequisites
@@ -16,7 +18,7 @@ Required tools and versions:
 |------|---------|---------------------|
 | Terraform | ≥ 1.0 | `terraform version` |
 | kubectl | ≥ 1.24 | `kubectl version --client` |
-| Kubernetes cluster | ≥ 1.24 | `kubectl version --short` |
+| Kubernetes cluster | ≥ 1.24 | `kubectl version` |
 
 **Cloud Provider Requirements:**
 - GKE: gcloud CLI authenticated (`gcloud auth login`)
@@ -32,9 +34,9 @@ Required tools and versions:
 
 ## Terraform State Management
 
-This deployment uses remote state backends for collaboration and state persistence.
+**Remote state backends are recommended** for team collaboration and state persistence, though local state is supported for development environments.
 
-**Backend Configuration:**
+**Supported Backend Configurations:**
 
 | Provider | Backend | State Path |
 |----------|---------|-----------|
@@ -43,7 +45,7 @@ This deployment uses remote state backends for collaboration and state persisten
 | AKS | Azure Blob Storage | `azurerm://<container>/terraform/cert-manager/terraform.tfstate` |
 | Generic | Local or custom remote backend | `./terraform.tfstate` (local) |
 
-The backend configuration is generated automatically by the `configure-backend.sh` script or manually created.
+The backend configuration is generated automatically by the `configure-backend.sh` script or manually created. **For production deployments, always use remote state.**
 
 For detailed state management documentation, see [Terraform State Management Guide](terraform-state-management.md).
 
@@ -247,16 +249,8 @@ kubectl get nodes
 terraform init
 ```
 
-Expected output:
+You should see:
 ```
-Initializing the backend...
-Successfully configured the backend "gcs"!
-
-Initializing provider plugins...
-- Installing hashicorp/helm v2.12.x...
-- Installing hashicorp/kubernetes v2.x...
-- Installing hashicorp/google v5.x...
-
 Terraform has been successfully initialized!
 ```
 
@@ -270,33 +264,9 @@ Review changes before applying:
 terraform plan
 ```
 
-**Review the plan output:**
-- Helm release `cert-manager` will be created
-- Namespace `cert-manager` will be created
-- ClusterIssuer `letsencrypt-prod` will be created
+Review the planned changes to verify cert-manager installation, namespace creation, and ClusterIssuer configuration.
 
-Example output:
-```
-Terraform will perform the following actions:
-
-  # helm_release.cert_manager[0] will be created
-  + resource "helm_release" "cert_manager" {
-      + chart            = "cert-manager"
-      + namespace        = "cert-manager"
-      + version          = "v1.19.2"
-      ...
-    }
-
-  # null_resource.letsencrypt_issuer[0] will be created
-  + resource "null_resource" "letsencrypt_issuer" {
-      + triggers = {
-          + cert_issuer_name = "letsencrypt-prod"
-          ...
-        }
-    }
-
-Plan: 3 to add, 0 to change, 0 to destroy.
-```
+> **Note:** You should see resources to be created including the cert-manager Helm release, namespace, and ClusterIssuer manifest.
 
 ---
 
@@ -327,13 +297,9 @@ Check cert-manager pods:
 kubectl get pods -n cert-manager
 ```
 
-Expected output:
-```
-NAME                                      READY   STATUS    RESTARTS   AGE
-cert-manager-7d4c5d8f9c-xxxxx            1/1     Running   0          90s
-cert-manager-cainjector-6d8f7b9c8-xxxxx  1/1     Running   0          90s
-cert-manager-webhook-5f5d6b8c9d-xxxxx    1/1     Running   0          90s
-```
+All three pods should be in Running status:
+
+![cert-manager pods running](img/cert-manager-pods.png)
 
 Verify ClusterIssuer:
 
@@ -341,11 +307,9 @@ Verify ClusterIssuer:
 kubectl get clusterissuer letsencrypt-prod
 ```
 
-Expected output:
-```
-NAME               READY   AGE
-letsencrypt-prod   True    60s
-```
+The ClusterIssuer should show READY status:
+
+![ClusterIssuer ready status](img/cert-manager-clusterissuer.png)
 
 Check detailed status:
 ```bash

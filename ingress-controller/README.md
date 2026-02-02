@@ -10,11 +10,10 @@ NGINX Ingress Controller provisions cloud LoadBalancers, routes HTTP/HTTPS traff
 
 ## Features
 
-- Cloud LoadBalancer provisioning with external IP assignment (GKE, EKS, AKS)
-- Host-based routing (`app1.example.com`, `app2.example.com`)
-- Path-based routing (`example.com/api`, `example.com/web`)
-- TLS termination with cert-manager integration
-- WebSocket support, rate limiting, DDoS protection
+- **Cloud LoadBalancer Integration**: Automatic external IP provisioning across GKE, EKS, and AKS
+- **Flexible Routing**: Host and path-based traffic distribution with TLS termination
+- **Production-Ready**: Built-in security features including rate limiting and DDoS protection
+- **Cert-Manager Integration**: Automated HTTPS certificate management
 
 ---
 
@@ -22,16 +21,13 @@ NGINX Ingress Controller provisions cloud LoadBalancers, routes HTTP/HTTPS traff
 
 Select a deployment method based on your requirements:
 
-| Method | Guide | Use Case |
-|--------|-------|----------|
-| **Manual Helm** | [Manual Deployment](../docs/ingress-controller-manual-deployment.md) | Learning, local development, direct control |
-| **Terraform CLI** | [Terraform Deployment](../docs/ingress-controller-terraform-deployment.md) | Infrastructure as Code, reproducible deployments |
-| **GitHub Actions** | [Automated CI/CD](../docs/ingress-controller-github-actions.md) | Production environments, team workflows |
+| Method | Guide | Description |
+|--------|-------|-------------|
+| **Manual Helm** | [Manual Deployment](../docs/ingress-controller-manual-deployment.md) | Direct command-line deployment with step-by-step control |
+| **Terraform CLI** | [Terraform Deployment](../docs/ingress-controller-terraform-deployment.md) | Infrastructure-as-code with version control and remote state |
+| **GitHub Actions** | [Automated CI/CD](../docs/ingress-controller-github-actions.md) | Fully automated deployment pipelines with PR-based workflows |
 
-**Choosing a Method:**
-- **Manual Helm**: Best for learning, quick setups, local development
-- **Terraform CLI**: Best for infrastructure as code workflows, version control, multi-environment deployments
-- **GitHub Actions**: Best for production, automated deployments, team collaboration with PR-based reviews
+All methods deploy identical NGINX Ingress Controller configurations with cloud LoadBalancer integration.
 
 ---
 

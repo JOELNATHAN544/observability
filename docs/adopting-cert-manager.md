@@ -230,83 +230,11 @@ terraform import 'kubernetes_manifest.letsencrypt_issuer[0]' \
 
 ---
 
-## Step 6: Integrate with GitHub Actions (Optional but Recommended)
+## Step 6: Integrate with GitHub Actions (Optional)
 
-After successfully adopting your cert-manager installation, you can automate future deployments with GitHub Actions.
+After successfully adopting your cert-manager installation, you can optionally automate future deployments with GitHub Actions.
 
-### Configure GitHub Repository Secrets
-
-Add these secrets to your GitHub repository (Settings → Secrets and variables → Actions):
-
-**For GKE**:
-- `GCP_PROJECT_ID` - Your GCP project ID
-- `GCP_SA_KEY` - Service account key (JSON)
-- `CLUSTER_NAME` - GKE cluster name
-- `CLUSTER_LOCATION` - GKE cluster region/zone
-- `TF_STATE_BUCKET` - GCS bucket for Terraform state
-- `LETSENCRYPT_EMAIL` - Email for Let's Encrypt
-- `REGION` - GCP region
-
-**For EKS**:
-- `AWS_REGION` - AWS region
-- `EKS_CLUSTER_NAME` - EKS cluster name
-- `TF_STATE_BUCKET` - S3 bucket for Terraform state
-- `LETSENCRYPT_EMAIL` - Email for Let's Encrypt
-- Plus AWS authentication (via OIDC or access keys)
-
-**For AKS**:
-- `AZURE_CREDENTIALS` - Service principal credentials (JSON)
-- `AKS_CLUSTER_NAME` - AKS cluster name
-- `AKS_RESOURCE_GROUP` - Azure resource group
-- `AZURE_STORAGE_ACCOUNT` - Storage account for Terraform state
-- `AZURE_STORAGE_CONTAINER` - Container name for Terraform state
-- `LETSENCRYPT_EMAIL` - Email for Let's Encrypt
-
-### Push Terraform State to Remote Backend
-
-After adoption, commit your Terraform state to the remote backend:
-
-```bash
-# Verify backend is configured
-cat backend-config.tf
-
-# Re-initialize with backend
-terraform init
-
-# This will prompt to migrate local state to remote backend
-# Type 'yes' when prompted
-
-# Verify state is now remote
-terraform state list
-```
-
-### Test the GitHub Actions Workflow
-
-Create a test branch and push changes:
-
-```bash
-git checkout -b test-cert-manager-adoption
-git add .
-git commit -m "Adopt cert-manager into Terraform management"
-git push origin test-cert-manager-adoption
-```
-
-Create a Pull Request - the workflow will:
-1. Run `terraform plan`
-2. Post plan output as PR comment
-3. Wait for approval
-
-After PR merge, the workflow will:
-1. Run `terraform apply` automatically
-2. Update cert-manager in your cluster
-
-### Workflow Files
-
-The following workflows are available:
-- `.github/workflows/deploy-cert-manager-gke.yaml` - For GKE clusters
-- `.github/workflows/deploy-cert-manager-eks.yaml` - For EKS clusters
-- `.github/workflows/deploy-cert-manager-aks.yaml` - For AKS clusters
-- `.github/workflows/destroy-cert-manager.yaml` - For destroying resources
+For complete GitHub Actions setup instructions, see [cert-manager GitHub Actions Deployment Guide](cert-manager-github-actions.md).
 
 ---
 
@@ -314,47 +242,10 @@ The following workflows are available:
 
 After successful adoption:
 
-1. **Commit State**: Push Terraform state to remote backend
-2. **Test Workflow**: Create a test PR to verify GitHub Actions integration
-3. **Monitor**: Run `terraform plan` regularly to detect configuration drift
-4. **Document**: Update team runbooks with the adopted configuration
-5. **Upgrade**: Test cert-manager version upgrades in non-production first
-
----
-
-## Troubleshooting GitHub Actions Integration
-
-### Workflow fails with "backend not configured"
-
-**Fix**: Ensure backend configuration is committed:
-```bash
-git add cert-manager/terraform/backend-config.tf
-git commit -m "Add backend configuration"
-git push
-```
-
-### Workflow fails with "state lock"
-
-**Cause**: Another Terraform operation is in progress or a previous run didn't release the lock.
-
-**Fix**: 
-```bash
-# List locks (if using GCS)
-gsutil ls gs://${TF_STATE_BUCKET}/terraform/cert-manager/
-
-# Force unlock (use with caution)
-terraform force-unlock <LOCK_ID>
-```
-
-### Plan shows unexpected changes after adoption
-
-**Cause**: GitHub Actions workflows pass additional variables (like `gke_endpoint`) that weren't in your local import.
-
-**Fix**: This is expected for GKE. The workflow dynamically retrieves cluster info. Ensure your `terraform.tfvars` has:
-```hcl
-gke_endpoint = ""        # Leave empty
-gke_ca_certificate = ""  # Leave empty
-```
+1. **Commit State**: Push Terraform state to remote backend if using remote state
+2. **Monitor**: Run `terraform plan` regularly to detect configuration drift
+3. **Document**: Update team runbooks with the adopted configuration
+4. **Upgrade**: Test cert-manager version upgrades in non-production first
 
 ---
 

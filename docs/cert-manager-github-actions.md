@@ -4,6 +4,8 @@ Automated TLS certificate management deployment using GitHub Actions CI/CD workf
 
 **Official Documentation**: [cert-manager.io](https://cert-manager.io/docs/) | **Helm Chart**: [artifacthub.io/packages/helm/cert-manager/cert-manager](https://artifacthub.io/packages/helm/cert-manager/cert-manager) | **Version**: `v1.19.2`
 
+> **Already have cert-manager installed?** If you want to manage an existing cert-manager deployment with GitHub Actions, see [Adopting Existing Installation](adopting-cert-manager.md).
+
 ---
 
 ## Overview
@@ -13,7 +15,7 @@ This deployment method uses GitHub Actions workflows to automatically deploy cer
 **Key Features:**
 - Automated Terraform backend configuration (GCS/S3/Azure Blob)
 - Cloud provider authentication via GitHub Secrets
-- Pull request-based plan review with automated comments
+- Terraform plan review with artifact storage
 - Deployment verification (pod readiness, ClusterIssuer configuration)
 - Zero-downtime upgrades
 - Remote state management
@@ -53,22 +55,27 @@ Navigate to repository **Settings → Secrets and variables → Actions → New 
 | `TF_STATE_BUCKET` | GCS bucket name for Terraform state |
 | `LETSENCRYPT_EMAIL` | Email for Let's Encrypt notifications |
 
-**Create service account:**
+**Create service account (if you don't already have one):**
 ```bash
+# Create service account for Terraform deployments
 gcloud iam service-accounts create terraform-deployer \
   --display-name="Terraform Deployment Account"
 
+# Grant Kubernetes admin permissions
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member="serviceAccount:terraform-deployer@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/container.admin"
 
+# Grant cloud storage permissions for Terraform state
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member="serviceAccount:terraform-deployer@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/storage.objectAdmin"
 
+# Create and download service account key
 gcloud iam service-accounts keys create key.json \
   --iam-account=terraform-deployer@YOUR_PROJECT_ID.iam.gserviceaccount.com
 
+# Encode key for GitHub Secrets
 cat key.json | base64 > key-base64.txt
 ```
 
@@ -129,57 +136,27 @@ Copy the entire JSON output to `AZURE_CREDENTIALS` secret.
 
 ### Step 2: Workflow Overview
 
-Three workflows are available in `.github/workflows/`:
+Deployment workflows are available in [`.github/workflows/`](../.github/workflows/) for each cloud provider:
 
-#### deploy-cert-manager-gke.yaml
+| Provider | Workflow File | Backend Storage |
+|----------|---------------|-----------------|
+| **GKE** | [`deploy-cert-manager-gke.yaml`](../.github/workflows/deploy-cert-manager-gke.yaml) | Google Cloud Storage |
+| **EKS** | [`deploy-cert-manager-eks.yaml`](../.github/workflows/deploy-cert-manager-eks.yaml) | AWS S3 + DynamoDB |
+| **AKS** | [`deploy-cert-manager-aks.yaml`](../.github/workflows/deploy-cert-manager-aks.yaml) | Azure Blob Storage |
 
-**Triggers:**
-- Manual: Actions tab → Deploy cert-manager (GKE) → Run workflow
-- Automatic: Push to `main` when cert-manager files change
-- Pull requests: Runs plan and comments result
-
-**Workflow Steps:**
-1. Authenticates to GKE cluster
-2. Configures GCS backend for Terraform state
-3. Runs `terraform plan` to preview changes
-4. On `main` push or manual apply: deploys cert-manager v1.19.2
-5. Verifies pod readiness and ClusterIssuer configuration
-
-#### deploy-cert-manager-eks.yaml
-
-Same workflow for AWS EKS with S3 backend.
-
-#### deploy-cert-manager-aks.yaml
-
-Same workflow for Azure AKS with Blob Storage backend.
+Each workflow handles authentication, backend configuration, Terraform execution, and deployment verification. Review the workflow files for detailed inline documentation.
 
 ---
 
 ### Step 3: Deploy cert-manager
 
-#### Option A: Manual Trigger
+**Option A: Manual Trigger**
 
-1. Navigate to **Actions** tab in GitHub repository
-2. Select workflow: `Deploy cert-manager (GKE/EKS/AKS)`
-3. Click **Run workflow**
-4. Select action:
-   - `plan` - Preview changes without applying
-   - `apply` - Deploy cert-manager
-5. Click **Run workflow** button
+Navigate to repository Actions tab, select the appropriate workflow for your cloud provider, click "Run workflow", and choose action (`plan` or `apply`).
 
-**Typical execution time:** 3-4 minutes
+**Option B: Automatic Trigger**
 
-#### Option B: Automatic Trigger
-
-Commit and push changes to cert-manager Terraform files:
-
-```bash
-git add cert-manager/terraform/
-git commit -m "Configure cert-manager deployment"
-git push origin main
-```
-
-Workflow executes automatically. For pull requests, plan results appear as PR comments.
+Push changes to `main` branch affecting cert-manager Terraform files to trigger automatic deployment.
 
 ---
 
@@ -188,25 +165,20 @@ Workflow executes automatically. For pull requests, plan results appear as PR co
 After successful workflow completion, verify the deployment:
 
 ```bash
-# Verify namespace
-kubectl get namespace cert-manager
-
 # Check pod status (expect 3 running pods)
 kubectl get pods -n cert-manager
+```
 
-# Expected output:
-# NAME                                       READY   STATUS    RESTARTS   AGE
-# cert-manager-7d4c5d8f9c-xxxxx             1/1     Running   0          2m
-# cert-manager-cainjector-6d8f7b9c8-xxxxx   1/1     Running   0          2m
-# cert-manager-webhook-5f5d6b8c9d-xxxxx     1/1     Running   0          2m
+![cert-manager pods running](img/cert-manager-pods.png)
 
+```bash
 # Verify ClusterIssuer
 kubectl get clusterissuer letsencrypt-prod
+```
 
-# Expected output:
-# NAME               READY   AGE
-# letsencrypt-prod   True    2m
+![ClusterIssuer ready status](img/cert-manager-clusterissuer.png)
 
+```bash
 # Detailed ClusterIssuer information
 kubectl describe clusterissuer letsencrypt-prod
 ```
@@ -245,24 +217,7 @@ Workflow executes automatically, performing an in-place Helm upgrade with zero d
 
 ## Uninstalling
 
-### Using Destroy Workflow
-
-1. Navigate to **Actions** tab
-2. Select `Destroy cert-manager` workflow
-3. Click **Run workflow**
-4. Select cloud provider (GKE/EKS/AKS)
-5. Enter confirmation: `DESTROY`
-6. Confirm execution
-
-**Resources Removed:**
-- cert-manager Helm release
-- cert-manager namespace
-- ClusterIssuer resources
-- cert-manager Custom Resource Definitions
-- All Certificate resources
-
-**Resources Preserved:**
-- Terraform state file (for potential recreation)
+Navigate to repository Actions tab, select the [`destroy-cert-manager.yaml`](../.github/workflows/destroy-cert-manager.yaml) workflow, select your cloud provider, and type `DESTROY` to confirm removal.
 
 ---
 

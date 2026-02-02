@@ -4,6 +4,8 @@ Automated Layer 7 load balancing deployment using GitHub Actions CI/CD workflows
 
 **Official Documentation**: [NGINX Inc. Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) | **Helm Repository**: `https://helm.nginx.com/stable` | **Chart**: `nginx-ingress` | **Version**: `2.4.2`
 
+> **Already have NGINX Ingress Controller installed?** If you want to manage an existing ingress controller deployment with GitHub Actions, see [Adopting Existing Installation](adopting-ingress-controller.md).
+
 ---
 
 ## Overview
@@ -13,7 +15,7 @@ This deployment method uses GitHub Actions workflows to automatically deploy NGI
 **Key Features:**
 - Automated Terraform backend configuration (GCS/S3/Azure Blob)
 - Cloud provider authentication via GitHub Secrets
-- Pull request-based plan review with automated comments
+- Terraform plan review with artifact storage
 - LoadBalancer provisioning with external IP assignment
 - Deployment verification (IngressClass, pod readiness, external IP)
 - Zero-downtime upgrades
@@ -52,22 +54,27 @@ Navigate to repository **Settings → Secrets and variables → Actions → New 
 | `REGION` | GCP region |
 | `TF_STATE_BUCKET` | GCS bucket name for Terraform state |
 
-**Create service account:**
+**Create service account (if you don't already have one):**
 ```bash
+# Create service account for Terraform deployments
 gcloud iam service-accounts create terraform-deployer \
   --display-name="Terraform Deployment Account"
 
+# Grant Kubernetes cluster management permissions
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member="serviceAccount:terraform-deployer@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/container.admin"
 
+# Grant GCS bucket access for Terraform state
 gcloud projects add-iam-policy-binding YOUR_PROJECT_ID \
   --member="serviceAccount:terraform-deployer@YOUR_PROJECT_ID.iam.gserviceaccount.com" \
   --role="roles/storage.objectAdmin"
 
+# Create service account key
 gcloud iam service-accounts keys create key.json \
   --iam-account=terraform-deployer@YOUR_PROJECT_ID.iam.gserviceaccount.com
 
+# Encode key for GitHub Secrets
 cat key.json | base64 > key-base64.txt
 ```
 
@@ -112,8 +119,9 @@ cat key.json | base64 > key-base64.txt
 | `AZURE_RESOURCE_GROUP` | Resource group containing AKS cluster |
 | `CLUSTER_NAME` | AKS cluster name |
 
-**Create service principal:**
+**Create service principal (if you don't already have one):**
 ```bash
+# Create service principal with contributor role for AKS management
 az ad sp create-for-rbac --name "terraform-deployer" \
   --role contributor \
   --scopes /subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/YOUR_RG \
@@ -126,122 +134,54 @@ Copy the entire JSON output to `AZURE_CREDENTIALS` secret.
 
 ### Step 2: Workflow Overview
 
-Three workflows are available in `.github/workflows/`:
+Deployment workflows are available in [`.github/workflows/`](../.github/workflows/) for each cloud provider:
 
-#### deploy-ingress-controller-gke.yaml
+| Provider | Workflow File | Backend Storage |
+|----------|---------------|-----------------|
+| **GKE** | [`deploy-ingress-controller-gke.yaml`](../.github/workflows/deploy-ingress-controller-gke.yaml) | Google Cloud Storage |
+| **EKS** | [`deploy-ingress-controller-eks.yaml`](../.github/workflows/deploy-ingress-controller-eks.yaml) | AWS S3 + DynamoDB |
+| **AKS** | [`deploy-ingress-controller-aks.yaml`](../.github/workflows/deploy-ingress-controller-aks.yaml) | Azure Blob Storage |
 
-**Triggers:**
-- Manual: Actions tab → Deploy Ingress Controller (GKE) → Run workflow
-- Automatic: Push to `main` when ingress-controller files change
-- Pull requests: Runs plan and comments result
-
-**Workflow Steps:**
-1. Authenticates to GKE cluster
-2. Configures GCS backend for Terraform state
-3. Runs `terraform plan` to preview changes
-4. On `main` push or manual apply: deploys NGINX Ingress v2.4.2
-5. Provisions cloud LoadBalancer with external IP
-6. Verifies IngressClass creation and pod readiness
-
-#### deploy-ingress-controller-eks.yaml
-
-Same workflow for AWS EKS with S3 backend and Network Load Balancer.
-
-#### deploy-ingress-controller-aks.yaml
-
-Same workflow for Azure AKS with Blob Storage backend and Azure Load Balancer.
+Each workflow handles authentication, backend configuration, Terraform execution, and deployment verification. Review the workflow files for detailed inline documentation.
 
 ---
 
 ### Step 3: Deploy Ingress Controller
 
-#### Option A: Manual Deployment
+**Option A: Manual Trigger**
 
-1. Navigate to **Actions** tab in GitHub repository
-2. Select workflow: `Deploy Ingress Controller (GKE/EKS/AKS)`
-3. Click **Run workflow**
-4. Choose action:
-   - `plan` - Preview changes without applying
-   - `apply` - Deploy ingress controller
-5. Click **Run workflow** button
-6. Monitor workflow progress (approximately 3-4 minutes)
+Navigate to repository Actions tab, select the appropriate workflow for your cloud provider, click "Run workflow", and choose action (`plan` or `apply`).
 
-**Workflow execution phases:**
+**Option B: Automatic Trigger**
 
-**Setup Environment (30 seconds):**
-- Checkout repository code
-- Authenticate to cloud provider
-- Configure kubectl and cluster context
-- Verify cluster connectivity
-
-**Terraform Plan (45 seconds):**
-- Install Terraform CLI
-- Generate backend configuration for state storage
-- Initialize Terraform (fetch providers, configure backend)
-- Validate Terraform configuration syntax
-- Create terraform.tfvars with deployment parameters
-- Execute `terraform plan` to show infrastructure changes
-- Upload plan artifact for apply job
-
-**Terraform Apply (90 seconds, only on apply action or main push):**
-- Download plan artifact
-- Execute `terraform apply -auto-approve`
-- Save Terraform outputs
-
-**Verify Deployment (60 seconds):**
-- Check ingress-nginx namespace creation
-- Wait for controller pod readiness (2 replicas by default)
-- Verify LoadBalancer service has external IP
-- Confirm IngressClass "nginx" exists
-
-**Total execution time:** 3-4 minutes
-
-#### Option B: Automatic Deployment (Push to main)
-
-Commit and push changes to trigger automated deployment:
-
-```bash
-git add ingress-controller/terraform/
-git commit -m "Update ingress controller configuration"
-git push origin main
-```
-
-Workflow automatically triggers. Pull requests run plan and comment results. Merges to `main` execute apply.
+Push changes to `main` branch affecting ingress-controller Terraform files to trigger automatic deployment.
 
 ---
 
-## Verify Deployment
+## Verification
 
-After workflow completes successfully:
+After successful workflow completion, verify the deployment:
 
 ```bash
-# Check namespace
-kubectl get namespace ingress-nginx
-
-# Check pods (2 replicas by default)
+# Check pod status (expect 2 running pods)
 kubectl get pods -n ingress-nginx
-
-# Expected output:
-# NAME                                        READY   STATUS    RESTARTS   AGE
-# nginx-monitoring-...-controller-xxxxx       1/1     Running   0          2m
-# nginx-monitoring-...-controller-yyyyy       1/1     Running   0          2m
-
-# Get LoadBalancer external IP
-kubectl get svc -n ingress-nginx
-
-# Expected output:
-# NAME                                          TYPE           CLUSTER-IP      EXTERNAL-IP       PORT(S)
-# nginx-monitoring-ingress-nginx-controller     LoadBalancer   10.x.x.x        34.123.45.67      80:xxxxx/TCP,443:yyyyy/TCP
-
-# Verify IngressClass
-kubectl get ingressclass nginx
-
-# Expected output:
-# NAME    CONTROLLER                      PARAMETERS   AGE
-# nginx   k8s.io/ingress-nginx            <none>       2m
 ```
 
-The `EXTERNAL-IP` field contains the public IP address for routing external traffic.
+![NGINX Ingress Controller pods running](img/ingress-nginx-pods.png)
+
+```bash
+# Get LoadBalancer external IP
+kubectl get svc -n ingress-nginx
+```
+
+![NGINX Ingress Controller LoadBalancer service](img/ingress-nginx-loadbalancer.png)
+
+```bash
+# Verify IngressClass
+kubectl get ingressclass nginx
+```
+
+![NGINX IngressClass created](img/ingress-nginx-ingressclass.png)
 
 ---
 
@@ -251,58 +191,33 @@ For usage examples and Ingress configuration, see [NGINX Ingress Controller READ
 
 ---
 
-## Updating Ingress Controller
+## Upgrading Ingress Controller
 
-To upgrade the ingress controller version:
+### Update Version
 
-**Step 1: Edit workflow file**
-```bash
-vim .github/workflows/deploy-ingress-controller-gke.yaml
-```
+1. Edit workflow file (e.g., `.github/workflows/deploy-ingress-controller-gke.yaml`)
+2. Locate version definition (approximately line 154):
+   ```yaml
+   ingress_nginx_version = "2.4.2"
+   ```
+3. Update to new version:
+   ```yaml
+   ingress_nginx_version = "2.5.0"
+   ```
+4. Commit and push:
+   ```bash
+   git add .github/workflows/deploy-ingress-controller-gke.yaml
+   git commit -m "Upgrade ingress-nginx to v2.5.0"
+   git push origin main
+   ```
 
-**Step 2: Update version parameter**
-```yaml
-# Locate this line (approximately line 154):
-ingress_nginx_version = "2.4.2"
-
-# Update to newer version:
-ingress_nginx_version = "2.5.0"
-```
-
-Check [NGINX Helm Repository](https://helm.nginx.com/stable) or run `helm search repo nginx-stable/nginx-ingress --versions` for the latest version.
-
-**Step 3: Commit and push**
-```bash
-git add .github/workflows/deploy-ingress-controller-gke.yaml
-git commit -m "Update ingress-nginx to 4.15.0"
-git push origin main
-```
-
-Terraform detects the version change and Helm performs a rolling update with zero downtime.
+Workflow executes automatically, performing an in-place Helm upgrade with zero downtime.
 
 ---
 
-## Cleanup
+## Uninstalling
 
-To remove the ingress controller:
-
-1. Navigate to **Actions** tab
-2. Select workflow: `Destroy Ingress Controller`
-3. Run workflow and choose provider (GKE/EKS/AKS)
-4. Type confirmation: `DESTROY` (uppercase required)
-5. Confirm and monitor teardown
-
-**Resources removed:**
-- NGINX Ingress Helm release
-- ingress-nginx namespace
-- LoadBalancer service (external IP released)
-- IngressClass resource
-- All Ingress resources become non-functional
-
-**Resources preserved:**
-- Terraform state file (for recovery)
-
-**Warning:** Removing the ingress controller breaks external access for all applications using Ingress resources.
+Navigate to repository Actions tab, select the [`destroy-ingress-controller.yaml`](../.github/workflows/destroy-ingress-controller.yaml) workflow, select your cloud provider, and type `DESTROY` to confirm removal.
 
 ---
 

@@ -6,6 +6,8 @@ Recommended for teams using infrastructure as code workflows, multi-environment 
 
 **Official Documentation**: [NGINX Inc. Ingress Controller](https://docs.nginx.com/nginx-ingress-controller/) | **GitHub**: [nginxinc/kubernetes-ingress](https://github.com/nginxinc/kubernetes-ingress) | **Helm Repository**: `https://helm.nginx.com/stable` | **Version**: `2.4.2`
 
+> **Already have NGINX Ingress Controller installed?** If you want to manage an existing ingress controller deployment with Terraform, see [Adopting Existing Installation](adopting-ingress-controller.md).
+
 ---
 
 ## Prerequisites
@@ -16,7 +18,7 @@ Required tools and versions:
 |------|---------|---------------------|
 | Terraform | ≥ 1.0 | `terraform version` |
 | kubectl | ≥ 1.24 | `kubectl version --client` |
-| Kubernetes cluster | ≥ 1.24 | `kubectl version --short` |
+| Kubernetes cluster | ≥ 1.24 | `kubectl version` |
 
 **Cloud Provider Requirements:**
 - GKE: gcloud CLI authenticated (`gcloud auth login`)
@@ -32,9 +34,9 @@ Required tools and versions:
 
 ## Terraform State Management
 
-This deployment uses remote state backends for collaboration and state persistence.
+**Remote state backends are recommended** for team collaboration and state persistence, though local state is supported for development environments.
 
-**Backend Configuration:**
+**Supported Backend Configurations:**
 
 | Provider | Backend | State Path |
 |----------|---------|-----------|
@@ -43,7 +45,7 @@ This deployment uses remote state backends for collaboration and state persisten
 | AKS | Azure Blob Storage | `azurerm://<container>/terraform/ingress-controller/terraform.tfstate` |
 | Generic | Local or custom remote backend | `./terraform.tfstate` (local) |
 
-The backend configuration is generated automatically by the `configure-backend.sh` script or manually created.
+The backend configuration is generated automatically by the `configure-backend.sh` script or manually created. **For production deployments, always use remote state.**
 
 For detailed state management documentation, see [Terraform State Management Guide](terraform-state-management.md).
 
@@ -414,23 +416,6 @@ Verify scaling:
 ```bash
 kubectl get pods -n ingress-nginx
 ```
-
----
-
-## Managing Existing Installation
-
-If NGINX Ingress Controller is already installed and you want Terraform to manage it:
-
-1. Set `install_nginx_ingress = true` in `terraform.tfvars`
-2. Import the existing Helm release:
-
-```bash
-terraform import 'helm_release.nginx_ingress[0]' ingress-nginx/nginx-monitoring
-```
-
-3. Run `terraform plan` to verify no changes are detected
-
-For detailed adoption procedures, see [Adopting Existing NGINX Ingress Installation](adopting-ingress-controller.md).
 
 ---
 

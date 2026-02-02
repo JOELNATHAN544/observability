@@ -16,7 +16,7 @@ Required tools and versions:
 |------|---------|---------------------|
 | kubectl | ≥ 1.24 | `kubectl version --client` |
 | Helm | ≥ 3.12 | `helm version` |
-| Kubernetes cluster | ≥ 1.24 | `kubectl version --short` |
+| Kubernetes cluster | ≥ 1.24 | `kubectl version` |
 
 **Cloud Provider Requirements:**
 - LoadBalancer support: Cluster must provision external IPs (GKE, EKS, AKS, or on-premise with MetalLB)
@@ -98,12 +98,9 @@ Check pod status:
 kubectl get pods -n ingress-nginx
 ```
 
-Expected output:
-```
-NAME                                                READY   STATUS    RESTARTS   AGE
-nginx-monitoring-ingress-nginx-controller-xxxxx     1/1     Running   0          60s
-nginx-monitoring-ingress-nginx-controller-yyyyy     1/1     Running   0          60s
-```
+All pods should be in Running status:
+
+![NGINX Ingress Controller pods running](img/ingress-nginx-pods.png)
 
 Wait for pods to reach ready state:
 ```bash
@@ -121,13 +118,9 @@ Check LoadBalancer service status:
 kubectl get svc -n ingress-nginx
 ```
 
-Expected output:
-```
-NAME                                          TYPE           CLUSTER-IP      EXTERNAL-IP       PORT(S)
-nginx-monitoring-ingress-nginx-controller     LoadBalancer   10.52.x.x       34.123.45.67      80:xxxxx/TCP,443:yyyyy/TCP
-```
+The `EXTERNAL-IP` field should show a public IP address (not `<pending>`):
 
-The `EXTERNAL-IP` field should show a public IP address (not `<pending>`).
+![NGINX Ingress Controller LoadBalancer service](img/ingress-nginx-loadbalancer.png)
 
 **If still pending:**
 - Allow 2-3 minutes for cloud provider provisioning
@@ -151,11 +144,9 @@ Verify IngressClass creation:
 kubectl get ingressclass nginx
 ```
 
-Expected output:
-```
-NAME    CONTROLLER                      PARAMETERS   AGE
-nginx   nginx.org/ingress-controller    <none>       2m
-```
+You should see the IngressClass:
+
+![NGINX IngressClass created](img/ingress-nginx-ingressclass.png)
 
 ---
 

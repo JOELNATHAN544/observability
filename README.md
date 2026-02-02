@@ -2,7 +2,15 @@
 
 Production-ready infrastructure-as-code for enterprise observability and operational tooling on Kubernetes. Modular components deployable independently or as a complete stack.
 
-## Requirements
+## Features
+
+- **Multi-Cloud Deployment**: Seamless deployment across GKE, EKS, AKS, or any Kubernetes cluster
+- **Flexible Automation**: Manual Helm, Terraform CLI, or GitHub Actions CI/CD workflows
+- **Remote State Management**: Team collaboration with cloud-native backends (GCS, S3, Azure Blob)
+- **Zero-Downtime Upgrades**: Production-ready deployments with rollback capabilities
+- **Complete Documentation**: Comprehensive guides for all deployment methods and components
+
+## Prerequisites
 
 | Tool | Version | Required For |
 |------|---------|-------------|
@@ -11,52 +19,30 @@ Production-ready infrastructure-as-code for enterprise observability and operati
 | [Terraform](https://developer.hashicorp.com/terraform/install) | ≥ 1.5.0 | Terraform deployments |
 | Kubernetes Cluster | ≥ 1.24 | GKE, EKS, AKS, or generic |
 
-## Components
-
-| Component | Description | Deployment Guides |
-|-----------|-------------|-------------------|
-| **[LGTM Stack](lgtm-stack/README.md)** | Monitoring, logging, tracing (Loki, Grafana, Tempo, Mimir) | [Terraform](docs/kubernetes-observability.md) |
-| **[ArgoCD](argocd/README.md)** | GitOps continuous delivery | [Manual](docs/manual-argocd-deployment.md) \| [Terraform](docs/argocd-terraform-deployment.md) |
-| **[ArgoCD Agent](argocd-agent/README.md)** | Multi-cluster GitOps (hub-and-spoke) | [Terraform](docs/argocd-agent-terraform-deployment.md) |
-| **[cert-manager](cert-manager/README.md)** | Automated TLS certificate management | [Manual](docs/cert-manager-manual-deployment.md) \| [Terraform](docs/cert-manager-terraform-deployment.md) |
-| **[Ingress Controller](ingress-controller/README.md)** | NGINX Layer 7 load balancing | [Manual](docs/ingress-controller-manual-deployment.md) \| [Terraform](docs/ingress-controller-terraform-deployment.md) |
-
 ## Deployment Methods
 
-### Method 1: Manual (Helm + kubectl)
-Direct deployment using command-line tools. See component-specific manual deployment guides.
+Choose the deployment approach that fits your workflow:
 
-### Method 2: Terraform CLI
-Infrastructure-as-code deployment with remote state storage.
+**Manual Deployment (Helm + kubectl)**
 
-```bash
-cd observability/<component>/terraform
+Direct command-line deployment for hands-on control and step-by-step visibility. Ideal for learning environments and quick setups.
 
-export TF_STATE_BUCKET="your-bucket-name"
-bash ../../.github/scripts/configure-backend.sh gke <component>
+**Terraform CLI**
 
-terraform init
-terraform plan
-terraform apply
-```
+Infrastructure-as-code with version control and remote state management. Best for reproducible multi-environment deployments and IaC workflows.
 
-### Method 3: Terraform + GitHub Actions
-Automated CI/CD deployment (cert-manager, ingress-controller only).
+**GitHub Actions Automation**
 
-- **Plan**: Triggered on PR
-- **Apply**: Triggered on merge to `main`
-- **State**: Managed in cloud storage (GCS/S3/Azure Blob)
+Fully automated CI/CD pipelines with PR-based reviews and production approvals. Currently available for cert-manager and ingress-controller.
 
-## State Management
+> **Note**: State management is handled automatically in GitHub Actions workflows. For Terraform CLI deployments, backends can be configured using provided templates. See [Terraform State Management Guide](docs/terraform-state-management.md) for details.
 
-All Terraform deployments use remote state storage for team collaboration:
+## Infrastructure Stack
 
-| Provider | Backend | State Location |
-|----------|---------|----------------|
-| **GKE** | Google Cloud Storage | `gs://<bucket>/terraform/<component>/terraform.tfstate` |
-| **EKS** | AWS S3 + DynamoDB | `s3://<bucket>/terraform/<component>/terraform.tfstate` |
-| **AKS** | Azure Blob Storage | `<account>/<container>/terraform/<component>/terraform.tfstate` |
-
-**State files persist across all deployments and are never deleted.**
-
-See [Terraform State Management Guide](docs/terraform-state-management.md) for bucket setup.
+| Component | Purpose | Documentation |
+|-----------|---------|---------------|
+| **[LGTM Stack](lgtm-stack/)** | Complete observability with Loki (logs), Grafana (dashboards), Tempo (traces), and Mimir (metrics) | [README](lgtm-stack/README.md) |
+| **[ArgoCD](argocd/)** | GitOps continuous delivery for declarative Kubernetes deployments | [README](argocd/README.md) |
+| **[ArgoCD Agent](argocd-agent/)** | Multi-cluster hub-and-spoke architecture for centralized GitOps | [README](argocd-agent/README.md) |
+| **[cert-manager](cert-manager/)** | Automated TLS certificate provisioning and renewal with Let's Encrypt | [README](cert-manager/README.md) |
+| **[Ingress Controller](ingress-controller/)** | NGINX-based Layer 7 load balancing and HTTP/HTTPS routing | [README](ingress-controller/README.md) |

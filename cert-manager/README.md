@@ -10,28 +10,24 @@ cert-manager automates the complete certificate lifecycle: request, validation, 
 
 ## Features
 
-- Automatic certificate provisioning from Let's Encrypt
-- Auto-renewal before expiration (30-day window)
-- Multi-cloud support (GKE, EKS, AKS, generic Kubernetes)
-- HTTP-01 ACME challenge validation via NGINX Ingress Controller
-- Automated Ingress TLS termination
+- **Automated Provisioning**: Let's Encrypt certificate issuance and renewal
+- **Multi-Cloud Ready**: Deploy on GKE, EKS, AKS, or any Kubernetes cluster
+- **HTTP-01 Validation**: ACME challenge validation via NGINX Ingress Controller
+- **Lifecycle Management**: Automatic renewal before expiration with 30-day window
 
 ---
 
-## Deployment Guides
+## Deployment Options
 
-Select a deployment method based on your requirements:
+Choose your preferred deployment approach:
 
-| Method | Guide | Use Case |
-|--------|-------|----------|
-| **Manual Helm** | [Manual Deployment](../docs/cert-manager-manual-deployment.md) | Learning, local development, direct control |
-| **Terraform CLI** | [Terraform Deployment](../docs/cert-manager-terraform-deployment.md) | Infrastructure as Code, reproducible deployments |
-| **GitHub Actions** | [Automated CI/CD](../docs/cert-manager-github-actions.md) | Production environments, team workflows |
+| Method | Guide | Description |
+|--------|-------|-------------|
+| **Manual Helm** | [Manual Deployment](../docs/cert-manager-manual-deployment.md) | Direct command-line deployment with step-by-step control |
+| **Terraform CLI** | [Terraform Deployment](../docs/cert-manager-terraform-deployment.md) | Infrastructure-as-code with version control and remote state |
+| **GitHub Actions** | [Automated CI/CD](../docs/cert-manager-github-actions.md) | Fully automated deployment pipelines with PR-based workflows |
 
-**Choosing a Method:**
-- **Manual Helm**: Best for learning, quick setups, local development
-- **Terraform CLI**: Best for infrastructure as code workflows, version control, multi-environment deployments
-- **GitHub Actions**: Best for production, automated deployments, team collaboration with PR-based reviews
+All methods deploy identical cert-manager configurations with Let's Encrypt ClusterIssuer integration.
 
 ---
 

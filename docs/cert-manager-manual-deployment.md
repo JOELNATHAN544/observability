@@ -16,7 +16,7 @@ Required tools and versions:
 |------|---------|---------------------|
 | kubectl | ≥ 1.24 | `kubectl version --client` |
 | Helm | ≥ 3.12 | `helm version` |
-| Kubernetes cluster | ≥ 1.24 | `kubectl version --short` |
+| Kubernetes cluster | ≥ 1.24 | `kubectl version` |
 
 **Dependencies:**
 - NGINX Ingress Controller must be installed ([deployment guide](ingress-controller-manual-deployment.md))
@@ -94,13 +94,9 @@ Check pod status:
 kubectl get pods -n cert-manager
 ```
 
-Expected output:
-```
-NAME                                      READY   STATUS    RESTARTS   AGE
-cert-manager-7d4c5d8f9c-xxxxx            1/1     Running   0          45s
-cert-manager-cainjector-6d8f7b9c8-xxxxx  1/1     Running   0          45s
-cert-manager-webhook-5f5d6b8c9d-xxxxx    1/1     Running   0          45s
-```
+All three pods should be in Running status:
+
+![cert-manager pods running](img/cert-manager-pods.png)
 
 Wait for all pods to reach ready state:
 ```bash
@@ -115,19 +111,15 @@ Verify CRD installation:
 kubectl get crd | grep cert-manager
 ```
 
-Expected CRDs:
-- `certificaterequests.cert-manager.io`
-- `certificates.cert-manager.io`
-- `challenges.acme.cert-manager.io`
-- `clusterissuers.cert-manager.io`
-- `issuers.cert-manager.io`
-- `orders.acme.cert-manager.io`
+You should see the cert-manager Custom Resource Definitions:
+
+![cert-manager CRDs installed](img/cert-manager-crds.png)
 
 ---
 
-## Configure ClusterIssuer
+## Post-Installation Configuration
 
-ClusterIssuers define how cert-manager requests certificates from certificate authorities.
+After cert-manager is successfully installed, configure a certificate issuer to enable automatic TLS certificate provisioning.
 
 ### Step 1: Create ClusterIssuer Manifest
 
@@ -184,13 +176,11 @@ clusterissuer.cert-manager.io/letsencrypt-prod created
 kubectl get clusterissuer letsencrypt-prod
 ```
 
-Expected output:
-```
-NAME               READY   AGE
-letsencrypt-prod   True    15s
-```
+The ClusterIssuer should show READY status:
 
-The `READY: True` status indicates the ClusterIssuer is configured correctly.
+![ClusterIssuer ready status](img/cert-manager-clusterissuer.png)
+
+The `READY: True` status indicates successful Let's Encrypt account registration and proper configuration.
 
 If not ready, check details:
 ```bash
