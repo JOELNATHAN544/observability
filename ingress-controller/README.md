@@ -34,6 +34,7 @@ All methods deploy identical NGINX Ingress Controller configurations with cloud 
 ## Operations
 
 - [Adopting Existing Installation](../docs/adopting-ingress-controller.md) - Migrate existing NGINX Ingress deployment
+  - **New**: Automated import via GitHub Actions checkbox (see [GitHub Actions guide](../docs/ingress-controller-github-actions.md#adopting-existing-ingress-controller-installation))
 - [Troubleshooting Guide](../docs/troubleshooting-ingress-controller.md) - LoadBalancer issues, DNS problems, routing failures
 
 ---

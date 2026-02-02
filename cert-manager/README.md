@@ -34,6 +34,7 @@ All methods deploy identical cert-manager configurations with Let's Encrypt Clus
 ## Operations
 
 - [Adopting Existing Installation](../docs/adopting-cert-manager.md) - Migrate existing cert-manager deployment
+  - **New**: Automated import via GitHub Actions checkbox (see [GitHub Actions guide](../docs/cert-manager-github-actions.md#adopting-existing-cert-manager-installation))
 - [Troubleshooting Guide](../docs/troubleshooting-cert-manager.md) - Common issues and resolutions
 
 ---

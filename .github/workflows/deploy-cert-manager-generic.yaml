@@ -16,6 +16,11 @@ on:
           - plan
           - apply
         default: 'plan'
+      adopt_existing_resources:
+        description: 'Import existing cert-manager resources into Terraform state'
+        required: false
+        type: boolean
+        default: false
   # Auto-trigger on push to main branch
   push:
     branches:
@@ -89,6 +94,29 @@ jobs:
       - name: Terraform Init
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
+
+
+      # Import existing resources (optional)
+      - name: Import Existing Resources
+        if: ${{ inputs.adopt_existing_resources == true }}
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Checking for existing cert-manager resources to import..."
+          echo "════════════════════════════════════════════════════════════════"
+          
+          # Check if Helm release exists
+          if helm list -n cert-manager 2>/dev/null | grep -q "cert-manager"; then
+            echo "✓ Found existing Helm release: cert-manager"
+            echo "Importing into Terraform state..."
+            terraform import 'helm_release.cert_manager[0]' cert-manager/cert-manager || echo "⚠ Already in state or import failed (will continue)"
+          else
+            echo "ℹ No existing cert-manager Helm release found"
+          fi
+          
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Import check complete! Proceeding with Terraform operations..."
+          echo "════════════════════════════════════════════════════════════════"
 
       # Validate Terraform syntax and configuration
       - name: Terraform Validate

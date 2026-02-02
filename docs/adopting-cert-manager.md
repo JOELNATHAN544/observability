@@ -2,6 +2,8 @@
 
 This guide walks you through adopting an existing Cert-Manager installation into Terraform management and integrating it with GitHub Actions workflows.
 
+> **Automated Option Available**: If you're using GitHub Actions workflows, there's now an **automated import feature** that handles adoption automatically. See [cert-manager GitHub Actions guide](cert-manager-github-actions.md#adopting-existing-cert-manager-installation) for the one-click approach. This guide covers manual adoption steps.
+
 > **When to Use This Guide**: If you already have cert-manager deployed (via Helm, kubectl, or other means) and want to manage it with Terraform and automate future deployments with GitHub Actions.
 
 ## Overview

@@ -18,6 +18,11 @@ on:
           - plan
           - apply
         default: 'plan'
+      adopt_existing_resources:
+        description: 'Import existing ingress-controller resources into Terraform state'
+        required: false
+        type: boolean
+        default: false
   # Auto-trigger on push to main branch for production deployments
   push:
     branches:
@@ -121,6 +126,29 @@ jobs:
         run: terraform init
 
       # Validate Terraform configuration syntax and structure
+
+      # Import existing resources (optional)
+      - name: Import Existing Resources
+        if: ${{ inputs.adopt_existing_resources == true }}
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Checking for existing ingress-controller resources to import..."
+          echo "════════════════════════════════════════════════════════════════"
+          
+          # Check if Helm release exists
+          if helm list -n ingress-nginx 2>/dev/null | grep -q "nginx"; then
+            echo "✓ Found existing Helm release in ingress-nginx namespace"
+            echo "Importing into Terraform state..."
+            terraform import 'helm_release.nginx_ingress[0]' ingress-nginx/nginx-monitoring || echo "⚠ Already in state or import failed (will continue)"
+          else
+            echo "ℹ No existing ingress-controller Helm release found"
+          fi
+          
+          echo "════════════════════════════════════════════════════════════════"
+          echo "Import check complete! Proceeding with Terraform operations..."
+          echo "════════════════════════════════════════════════════════════════"
+
       # Catches configuration errors before planning
       - name: Terraform Validate
         working-directory: ${{ env.WORKING_DIR }}

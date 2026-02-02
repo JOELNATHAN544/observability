@@ -152,11 +152,49 @@ Each workflow handles authentication, backend configuration, Terraform execution
 
 **Option A: Manual Trigger**
 
-Navigate to repository Actions tab, select the appropriate workflow for your cloud provider, click "Run workflow", and choose action (`plan` or `apply`).
+Navigate to repository Actions tab, select the appropriate workflow for your cloud provider, click "Run workflow", and configure options:
+
+**Workflow Options:**
+- **Terraform Action**: Choose `plan` (preview changes) or `apply` (deploy)
+- **Import existing resources**: Check this box to automatically import existing cert-manager installations into Terraform state (optional, see below)
 
 **Option B: Automatic Trigger**
 
 Push changes to `main` branch affecting cert-manager Terraform files to trigger automatic deployment.
+
+---
+
+## Adopting Existing cert-manager Installation
+
+If you already have cert-manager installed in your cluster and want to manage it with Terraform, use the **automated import feature**.
+
+### How It Works
+
+1. Go to Actions → Select cert-manager workflow
+2. Click "Run workflow"
+3. ☑ **Check** "Import existing resources into Terraform state"
+4. Select `apply`
+5. Run workflow
+
+The workflow will:
+- Detect existing cert-manager Helm release
+- Automatically import it into Terraform state
+- Continue managing it with Terraform (no recreation, no downtime)
+
+### What Gets Imported
+
+- Helm release: `cert-manager/cert-manager`
+- Existing namespace: `cert-manager`
+- All existing resources remain untouched
+
+### Important Notes
+
+- **No downtime**: Import does not recreate resources
+- **Safe operation**: Gracefully handles resources already in state
+- **Optional**: Fresh deployments don't need this (leave unchecked)
+- **One-time**: Only needed for initial adoption
+
+For manual adoption steps, see [Adopting cert-manager guide](adopting-cert-manager.md).
 
 ---
 
