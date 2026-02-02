@@ -32,6 +32,33 @@ Required tools and versions:
 
 ---
 
+## Important: Multi-Cluster Environments
+
+For deployments with multiple clusters, explicitly configure the target cluster in `terraform.tfvars` rather than relying on kubectl context.
+
+**For GKE clusters:**
+```bash
+# Get cluster endpoint and CA certificate
+gcloud container clusters describe CLUSTER_NAME \
+  --region REGION \
+  --project PROJECT_ID \
+  --format='value(endpoint)' > endpoint.txt
+
+gcloud container clusters describe CLUSTER_NAME \
+  --region REGION \
+  --project PROJECT_ID \
+  --format='value(masterAuth.clusterCaCertificate)' > ca_cert.txt
+```
+
+Then configure in `terraform.tfvars`:
+```hcl
+gke_endpoint       = "34.123.45.67"      # From endpoint.txt
+gke_ca_certificate = "LS0tLS1CRUdJ..."  # From ca_cert.txt
+project_id         = "your-project-id"
+``` 
+
+---
+
 ## Terraform State Management
 
 **Remote state backends are recommended** for team collaboration and state persistence, though local state is supported for development environments.
@@ -139,6 +166,31 @@ Copy the template and customize:
 cp terraform.tfvars.template terraform.tfvars
 ```
 
+**Variable Configuration Guide**
+
+| Variable | Purpose | Configuration |
+|----------|---------|---------------|
+| `gke_endpoint` | Cluster API endpoint | Leave empty to use kubectl context, or specify for explicit cluster targeting |
+| `gke_ca_certificate` | Cluster CA certificate | Leave empty to use kubectl context, or specify for explicit cluster targeting |
+| `cloud_provider` | Target cloud platform | `gke`, `eks`, `aks`, or `generic` |
+| `project_id` | GCP Project ID | Required for GKE |
+
+**Two approaches:**
+
+1. **Using kubectl context (simpler for single cluster):**
+   ```hcl
+   gke_endpoint       = ""
+   gke_ca_certificate = ""
+   ```
+
+2. **Explicit configuration (recommended for multi-cluster):**
+   ```hcl
+   gke_endpoint       = "34.123.45.67"
+   gke_ca_certificate = "LS0tLS1CRUdJTi0t..."
+   ```
+   
+   Use the commands in the Multi-Cluster Environments section to retrieve these values.
+
 Edit `terraform.tfvars`:
 
 **Minimal configuration:**
@@ -197,32 +249,14 @@ ingress_class_name = "nginx"
 
 ---
 
-### Step 4: Authenticate to Kubernetes Cluster
+### Step 4: Verify Configuration
 
-**For GKE:**
-```bash
-gcloud auth login
-gcloud config set project YOUR_PROJECT_ID
-gcloud container clusters get-credentials CLUSTER_NAME --region REGION
-```
+Before deploying, verify your configuration:
 
-**For EKS:**
 ```bash
-aws configure
-aws eks update-kubeconfig --name CLUSTER_NAME --region REGION
-```
+# Review your terraform.tfvars
+cat terraform.tfvars | grep -E "cloud_provider|project_id|gke_endpoint|install_nginx_ingress"
 
-**For AKS:**
-```bash
-az login
-az account set --subscription SUBSCRIPTION_ID
-az aks get-credentials --resource-group RESOURCE_GROUP --name CLUSTER_NAME
-```
-
-**Verify access:**
-```bash
-kubectl cluster-info
-kubectl get nodes
 ```
 
 ---
@@ -305,18 +339,19 @@ Check ingress controller pods:
 kubectl get pods -n ingress-nginx
 ```
 
-Expected output:
-```
-NAME                                                READY   STATUS    RESTARTS   AGE
-nginx-monitoring-ingress-nginx-controller-xxxxx     1/1     Running   0          2m
-nginx-monitoring-ingress-nginx-controller-yyyyy     1/1     Running   0          2m
-```
+All controller pods should be in Running status:
+
+![NGINX Ingress Controller pods running](img/ingress-nginx-pods.png)
 
 Verify LoadBalancer service and external IP:
 
 ```bash
 kubectl get svc -n ingress-nginx
 ```
+
+The LoadBalancer should have an EXTERNAL-IP assigned:
+
+![NGINX Ingress Controller LoadBalancer service](img/ingress-nginx-loadbalancer.png)
 
 Expected output:
 ```
@@ -340,6 +375,10 @@ Verify IngressClass:
 ```bash
 kubectl get ingressclass nginx
 ```
+
+The "nginx" IngressClass should be created and ready:
+
+![NGINX IngressClass created](img/ingress-nginx-ingressclass.png)
 
 Expected output:
 ```
