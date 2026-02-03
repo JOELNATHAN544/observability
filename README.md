@@ -1,31 +1,48 @@
 # Kubernetes Observability & Operations
 
-Production-ready infrastructure-as-code for deploying enterprise observability and operational tooling on Google Kubernetes Engine (GKE). This repository provides modular, production-grade deployments where each component can be installed independently or as part of a complete observability and operations stack.
+Production-ready infrastructure-as-code for enterprise observability and operational tooling on Kubernetes. Modular components deployable independently or as a complete stack.
 
-## Requirements
+## Features
 
-- [Google Kubernetes Engine (GKE)](https://cloud.google.com/kubernetes-engine/docs/quickstart) cluster
-- [kubectl](https://kubernetes.io/docs/tasks/tools/) configured with cluster admin access
-- [Helm 3.8+](https://helm.sh/docs/intro/install/) (for manual deployments)
-- [Terraform 1.3+](https://developer.hashicorp.com/terraform/install) (for automated deployments)
+- **Multi-Cloud Deployment**: Seamless deployment across GKE, EKS, AKS, or any Kubernetes cluster
+- **Flexible Automation**: Manual Helm, Terraform CLI, or GitHub Actions CI/CD workflows
+- **Remote State Management**: Team collaboration with cloud-native backends (GCS, S3, Azure Blob)
+- **Zero-Downtime Upgrades**: Production-ready deployments with rollback capabilities
+- **Complete Documentation**: Comprehensive guides for all deployment methods and components
 
-## Architecture
+## Prerequisites
 
-This repository follows a modular architecture where components maintain operational independence while integrating seamlessly. Deploy individual components as needed or provision the complete stack for full observability coverage.
+| Tool | Version | Required For |
+|------|---------|-------------|
+| [kubectl](https://kubernetes.io/docs/tasks/tools/) | ≥ 1.24 | All deployments |
+| [Helm](https://helm.sh/docs/intro/install/) | ≥ 3.12 | Manual deployments |
+| [Terraform](https://developer.hashicorp.com/terraform/install) | ≥ 1.5.0 | Terraform deployments |
+| Kubernetes Cluster | ≥ 1.24 | GKE, EKS, AKS, or generic |
 
-## Components
+## Deployment Methods
 
-### [LGTM Observability Stack](lgtm-stack/README.md)
-Comprehensive monitoring, logging, and distributed tracing platform built on Grafana Labs' open-source stack (Loki, Grafana, Tempo, Mimir).
+Choose the deployment approach that fits your workflow:
 
-### [ArgoCD GitOps Engine](argocd/README.md)
-Declarative continuous delivery system for managing Kubernetes applications and configurations through Git-based workflows.
+**Manual Deployment (Helm + kubectl)**
 
-### [ArgoCD Agent (Hub-and-Spoke)](argocd-agent/README.md)
-Production-grade multi-cluster GitOps with Argo CD Agent Managed Mode for centralized control plane with distributed spoke clusters.
+Direct command-line deployment for hands-on control and step-by-step visibility. Ideal for learning environments and quick setups.
 
-### [cert-manager Certificate Authority](cert-manager/README.md)
-Automated X.509 certificate lifecycle management with native support for ACME providers including Let's Encrypt.
+**Terraform CLI**
 
-### [NGINX Ingress Controller](ingress-controller/README.md)
-Layer 7 load balancer and reverse proxy for routing external HTTP/HTTPS traffic to cluster services.
+Infrastructure-as-code with version control and remote state management. Best for reproducible multi-environment deployments and IaC workflows.
+
+**GitHub Actions Automation**
+
+Fully automated CI/CD pipelines with PR-based reviews and production approvals. Currently available for cert-manager and ingress-controller.
+
+> **Note**: State management is handled automatically in GitHub Actions workflows. For Terraform CLI deployments, backends can be configured using provided templates. See [Terraform State Management Guide](docs/terraform-state-management.md) for details.
+
+## Infrastructure Stack
+
+| Component | Purpose | Documentation |
+|-----------|---------|---------------|
+| **[LGTM Stack](lgtm-stack/)** | Complete observability with Loki (logs), Grafana (dashboards), Tempo (traces), and Mimir (metrics) | [README](lgtm-stack/README.md) |
+| **[ArgoCD](argocd/)** | GitOps continuous delivery for declarative Kubernetes deployments | [README](argocd/README.md) |
+| **[ArgoCD Agent](argocd-agent/)** | Multi-cluster hub-and-spoke architecture for centralized GitOps | [README](argocd-agent/README.md) |
+| **[cert-manager](cert-manager/)** | Automated TLS certificate provisioning and renewal with Let's Encrypt | [README](cert-manager/README.md) |
+| **[Ingress Controller](ingress-controller/)** | NGINX-based Layer 7 load balancing and HTTP/HTTPS routing | [README](ingress-controller/README.md) |
