@@ -345,7 +345,7 @@ jobs:
           # Verify controller pods are running and ready
           echo "Checking ingress-controller pods..."
           kubectl get pods -n ${{ env.NGINX_INGRESS_NAMESPACE }}
-          kubectl wait --for=condition=ready pod -l app.kubernetes.io/name=${{ env.NGINX_INGRESS_RELEASE_NAME }} -n ${{ env.NGINX_INGRESS_NAMESPACE }} --timeout=300s
+          kubectl wait --for=condition=ready pod -l app.kubernetes.io/instance=${{ env.NGINX_INGRESS_RELEASE_NAME }} -n ${{ env.NGINX_INGRESS_NAMESPACE }} --timeout=300s
           
           # Confirm IngressClass resource is created
           echo "Checking IngressClass..."
