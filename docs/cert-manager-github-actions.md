@@ -134,19 +134,19 @@ Copy the entire JSON output to `AZURE_CREDENTIALS` secret.
 
 ---
 
-## Configuration Variables
+### Step 2: Configure Repository Variables (Optional)
 
-The workflows support GitHub repository variables for flexible configuration:
+The workflows support GitHub repository variables for flexible configuration. If not set, sensible defaults are used automatically.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `CERT_MANAGER_VERSION` | Helm chart version | `v1.19.2` |
-| `CERT_MANAGER_NAMESPACE` | Kubernetes namespace | `cert-manager` |
-| `CERT_MANAGER_RELEASE_NAME` | Helm release name | `cert-manager` |
+**Navigate to:** Repository → **Settings** → **Secrets and variables** → **Actions** → **Variables** tab
 
-See [GitHub Variables Configuration Guide](github-variables-configuration.md) for detailed setup instructions.
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `CERT_MANAGER_VERSION` | Helm chart version | `v1.19.2` | `v1.20.0` |
+| `CERT_MANAGER_NAMESPACE` | Kubernetes namespace | `cert-manager` | `cert-manager` |
+| `CERT_MANAGER_RELEASE_NAME` | Helm release name | `cert-manager` | `cert-manager-prod` |
 
-### Step 2: Workflow Overview
+### Step 3: Workflow Overview
 
 Deployment workflows are available in [`.github/workflows/`](../.github/workflows/) for each cloud provider:
 
@@ -160,7 +160,7 @@ Each workflow handles authentication, backend configuration, Terraform execution
 
 ---
 
-### Step 3: Deploy cert-manager
+### Step 4: Deploy cert-manager
 
 **Option A: Manual Trigger**
 
@@ -243,25 +243,30 @@ For usage examples and configuring automatic TLS certificates, see [cert-manager
 
 ## Upgrading cert-manager
 
-### Update Version
+### Option 1: Using GitHub Variables (Recommended)
+
+1. Navigate to: Repository → **Settings** → **Secrets and variables** → **Actions** → **Variables**
+2. Update `CERT_MANAGER_VERSION` to new version (e.g., `v1.20.0`)
+3. Run the deployment workflow (manually trigger or push to main)
+
+The workflow automatically detects the version change and performs an in-place Helm upgrade with zero downtime.
+
+### Option 2: Edit Workflow File (Legacy Method)
 
 1. Edit workflow file (e.g., `.github/workflows/deploy-cert-manager-gke.yaml`)
-2. Locate version definition (approximately line 156):
+2. Locate the environment variables section at the top:
    ```yaml
-   cert_manager_version = "v1.19.2"
+   env:
+     CERT_MANAGER_VERSION: ${{ vars.CERT_MANAGER_VERSION || 'v1.19.2' }}
    ```
-3. Update to new version:
+3. Change the default value:
    ```yaml
-   cert_manager_version = "v1.20.0"
+   env:
+     CERT_MANAGER_VERSION: ${{ vars.CERT_MANAGER_VERSION || 'v1.20.0' }}
    ```
-4. Commit and push:
-   ```bash
-   git add .github/workflows/deploy-cert-manager-gke.yaml
-   git commit -m "Upgrade cert-manager to v1.20.0"
-   git push origin main
-   ```
+4. Commit and push changes
 
-Workflow executes automatically, performing an in-place Helm upgrade with zero downtime.
+**Note:** Using GitHub Variables (Option 1) is recommended as it doesn't require workflow file changes.
 
 ---
 

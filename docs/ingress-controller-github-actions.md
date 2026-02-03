@@ -132,19 +132,19 @@ Copy the entire JSON output to `AZURE_CREDENTIALS` secret.
 
 ---
 
-## Configuration Variables
+### Step 2: Configure Repository Variables (Optional)
 
-The workflows support GitHub repository variables for flexible configuration:
+The workflows support GitHub repository variables for flexible configuration. If not set, sensible defaults are used automatically.
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `NGINX_INGRESS_VERSION` | Helm chart version | `2.4.2` |
-| `NGINX_INGRESS_NAMESPACE` | Kubernetes namespace | `ingress-nginx` |
-| `NGINX_INGRESS_RELEASE_NAME` | Helm release name | `nginx-monitoring` |
+**Navigate to:** Repository → **Settings** → **Secrets and variables** → **Actions** → **Variables** tab
 
-See [GitHub Variables Configuration Guide](github-variables-configuration.md) for detailed setup instructions.
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| `NGINX_INGRESS_VERSION` | Helm chart version | `2.4.2` | `2.5.0` |
+| `NGINX_INGRESS_NAMESPACE` | Kubernetes namespace | `ingress-nginx` | `ingress-nginx` |
+| `NGINX_INGRESS_RELEASE_NAME` | Helm release name | `nginx-monitoring` | `nginx-prod` |
 
-### Step 2: Workflow Overview
+### Step 3: Workflow Overview
 
 Deployment workflows are available in [`.github/workflows/`](../.github/workflows/) for each cloud provider:
 
@@ -158,7 +158,7 @@ Each workflow handles authentication, backend configuration, Terraform execution
 
 ---
 
-### Step 3: Deploy Ingress Controller
+### Step 4: Deploy Ingress Controller
 
 **Option A: Manual Trigger**
 
@@ -243,16 +243,26 @@ For usage examples and Ingress configuration, see [NGINX Ingress Controller READ
 
 ## Upgrading Ingress Controller
 
-### Update Version
+### Option 1: Using GitHub Variables (Recommended)
+
+1. Navigate to: Repository → **Settings** → **Secrets and variables** → **Actions** → **Variables**
+2. Update `NGINX_INGRESS_VERSION` to new version (e.g., `2.5.0`)
+3. Run the deployment workflow (manually trigger or push to main)
+
+The workflow automatically detects the version change and performs an in-place Helm upgrade with zero downtime.
+
+### Option 2: Edit Workflow File (Legacy Method)
 
 1. Edit workflow file (e.g., `.github/workflows/deploy-ingress-controller-gke.yaml`)
-2. Locate version definition (approximately line 154):
+2. Locate the environment variables section at the top:
    ```yaml
-   ingress_nginx_version = "2.4.2"
+   env:
+     NGINX_INGRESS_VERSION: ${{ vars.NGINX_INGRESS_VERSION || '2.4.2' }}
    ```
-3. Update to new version:
+3. Update the default value:
    ```yaml
-   ingress_nginx_version = "2.5.0"
+   env:
+     NGINX_INGRESS_VERSION: ${{ vars.NGINX_INGRESS_VERSION || '2.5.0' }}
    ```
 4. Commit and push:
    ```bash
