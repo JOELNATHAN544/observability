@@ -217,6 +217,7 @@ jobs:
           keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
           keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
           keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
+          keycloak_provider_client_id  = "${{ vars.KEYCLOAK_PROVIDER_CLIENT_ID || 'admin-cli' }}"
           argocd_url                   = "${{ secrets.ARGOCD_URL }}"
           create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
           default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
@@ -402,6 +403,7 @@ jobs:
           keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
           keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
           keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
+          keycloak_provider_client_id  = "${{ vars.KEYCLOAK_PROVIDER_CLIENT_ID || 'admin-cli' }}"
           argocd_url                   = "${{ secrets.ARGOCD_URL }}"
           create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
           default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
