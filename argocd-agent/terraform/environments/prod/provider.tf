@@ -18,12 +18,20 @@ provider "helm" {
   }
 }
 
+# Keycloak provider supports two authentication modes:
+# 1. User credentials (username/password) - for development/small teams
+# 2. Client credentials (client_secret) - for production automation
 provider "keycloak" {
-  client_id = var.keycloak_provider_client_id
-  url       = var.keycloak_url
-  username  = var.keycloak_user
-  password  = var.keycloak_password
-  realm     = var.keycloak_realm
+  client_id     = var.keycloak_provider_client_id
+  url           = var.keycloak_url
+  realm         = var.keycloak_realm
+  
+  # User credentials flow (when client_secret is empty)
+  username      = var.keycloak_provider_client_secret == "" ? var.keycloak_user : null
+  password      = var.keycloak_provider_client_secret == "" ? var.keycloak_password : null
+  
+  # Client credentials flow (when client_secret is set)
+  client_secret = var.keycloak_provider_client_secret != "" ? var.keycloak_provider_client_secret : null
 }
 
 # Spoke cluster providers are configured dynamically
