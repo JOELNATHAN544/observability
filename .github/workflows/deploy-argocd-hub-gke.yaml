@@ -185,6 +185,14 @@ jobs:
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
         run: |
+          # Sanitize secrets to remove trailing whitespace/newlines
+          KEYCLOAK_URL=$(echo "${{ secrets.KEYCLOAK_URL }}" | tr -d '\n\r' | xargs)
+          KEYCLOAK_USER=$(echo "${{ secrets.KEYCLOAK_USER }}" | tr -d '\n\r' | xargs)
+          KEYCLOAK_PASSWORD=$(echo -n "${{ secrets.KEYCLOAK_PASSWORD }}" | tr -d '\n\r')  # Preserve internal spaces
+          ARGOCD_URL=$(echo "${{ secrets.ARGOCD_URL }}" | tr -d '\n\r' | xargs)
+          ARGOCD_HOST=$(echo "${{ secrets.ARGOCD_HOST }}" | tr -d '\n\r' | xargs)
+          DEFAULT_ADMIN_PASSWORD=$(echo -n "${{ secrets.DEFAULT_ADMIN_PASSWORD }}" | tr -d '\n\r')  # Preserve internal spaces
+          
           cat > terraform.tfvars <<EOF
           # Deployment control
           deploy_hub                   = true
@@ -202,7 +210,7 @@ jobs:
           principal_expose_method      = "${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
           principal_ingress_host       = "${{ secrets.PRINCIPAL_INGRESS_HOST }}"
           enable_principal_ingress     = false
-          argocd_host                  = "${{ secrets.ARGOCD_HOST }}"
+          argocd_host                  = "$ARGOCD_HOST"
 
           # Infrastructure modules
           install_cert_manager         = ${{ vars.INSTALL_CERT_MANAGER || 'false' }}
@@ -213,16 +221,16 @@ jobs:
 
           # Keycloak integration (optional)
           enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'true' }}
-          keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
-          keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
-          keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          keycloak_url                 = "$KEYCLOAK_URL"
+          keycloak_user                = "$KEYCLOAK_USER"
+          keycloak_password            = "$KEYCLOAK_PASSWORD"
           keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
           keycloak_provider_client_id  = "${{ vars.KEYCLOAK_PROVIDER_CLIENT_ID || 'admin-cli' }}"
-          argocd_url                   = "${{ secrets.ARGOCD_URL }}"
+          argocd_url                   = "$ARGOCD_URL"
           create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
           default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
           default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
-          default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
+          default_admin_password       = "$DEFAULT_ADMIN_PASSWORD"
           default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
 
           # AppProject configuration
@@ -371,6 +379,14 @@ jobs:
       - name: Create terraform.tfvars
         working-directory: ${{ env.WORKING_DIR }}
         run: |
+          # Sanitize secrets to remove trailing whitespace/newlines
+          KEYCLOAK_URL=$(echo "${{ secrets.KEYCLOAK_URL }}" | tr -d '\n\r' | xargs)
+          KEYCLOAK_USER=$(echo "${{ secrets.KEYCLOAK_USER }}" | tr -d '\n\r' | xargs)
+          KEYCLOAK_PASSWORD=$(echo -n "${{ secrets.KEYCLOAK_PASSWORD }}" | tr -d '\n\r')  # Preserve internal spaces
+          ARGOCD_URL=$(echo "${{ secrets.ARGOCD_URL }}" | tr -d '\n\r' | xargs)
+          ARGOCD_HOST=$(echo "${{ secrets.ARGOCD_HOST }}" | tr -d '\n\r' | xargs)
+          DEFAULT_ADMIN_PASSWORD=$(echo -n "${{ secrets.DEFAULT_ADMIN_PASSWORD }}" | tr -d '\n\r')  # Preserve internal spaces
+          
           cat > terraform.tfvars <<EOF
           # Deployment control
           deploy_hub                   = true
@@ -388,7 +404,7 @@ jobs:
           principal_expose_method      = "${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
           principal_ingress_host       = "${{ secrets.PRINCIPAL_INGRESS_HOST }}"
           enable_principal_ingress     = false
-          argocd_host                  = "${{ secrets.ARGOCD_HOST }}"
+          argocd_host                  = "$ARGOCD_HOST"
 
           # Infrastructure modules
           install_cert_manager         = ${{ vars.INSTALL_CERT_MANAGER || 'false' }}
@@ -399,16 +415,16 @@ jobs:
 
           # Keycloak integration (optional)
           enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'true' }}
-          keycloak_url                 = "${{ secrets.KEYCLOAK_URL }}"
-          keycloak_user                = "${{ secrets.KEYCLOAK_USER }}"
-          keycloak_password            = "${{ secrets.KEYCLOAK_PASSWORD }}"
+          keycloak_url                 = "$KEYCLOAK_URL"
+          keycloak_user                = "$KEYCLOAK_USER"
+          keycloak_password            = "$KEYCLOAK_PASSWORD"
           keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
           keycloak_provider_client_id  = "${{ vars.KEYCLOAK_PROVIDER_CLIENT_ID || 'admin-cli' }}"
-          argocd_url                   = "${{ secrets.ARGOCD_URL }}"
+          argocd_url                   = "$ARGOCD_URL"
           create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
           default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
           default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
-          default_admin_password       = "${{ secrets.DEFAULT_ADMIN_PASSWORD }}"
+          default_admin_password       = "$DEFAULT_ADMIN_PASSWORD"
           default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
 
           # AppProject configuration
