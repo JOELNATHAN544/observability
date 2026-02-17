@@ -1197,18 +1197,19 @@ resource "kubernetes_namespace" "spoke_agent_managed_namespace" {
 # SECTION 1: KEYCLOAK REALM SETUP
 # =============================================================================
 
-resource "keycloak_realm" "argocd" {
-  count   = var.deploy_hub && var.enable_keycloak ? 1 : 0
-  realm   = var.keycloak_realm
-  enabled = true
-
-  # Prevent 409 Conflict if realm already exists.
-  # On first deploy with an existing realm, run:
-  #   terraform import 'module.hub_cluster[0].keycloak_realm.argocd[0]' argocd
-  lifecycle {
-    ignore_changes = [realm]
-  }
-}
+# Realm creation skipped as it already exists
+# resource "keycloak_realm" "argocd" {
+#   count   = var.deploy_hub && var.enable_keycloak ? 1 : 0
+#   realm   = var.keycloak_realm
+#   enabled = true
+#
+#   # Prevent 409 Conflict if realm already exists.
+#   # On first deploy with an existing realm, run:
+#   #   terraform import 'module.hub_cluster[0].keycloak_realm.argocd[0]' argocd
+#   lifecycle {
+#     ignore_changes = [realm]
+#   }
+# }
 
 # =============================================================================
 # SECTION 2: KEYCLOAK CLIENT (Client Authentication Flow)
@@ -1218,7 +1219,7 @@ resource "keycloak_realm" "argocd" {
 resource "keycloak_openid_client" "argocd" {
   count = var.deploy_hub && var.enable_keycloak && !var.keycloak_enable_pkce ? 1 : 0
 
-  realm_id                     = keycloak_realm.argocd[0].id
+  realm_id                     = var.keycloak_realm
   client_id                    = var.keycloak_client_id
   name                         = "ArgoCD OIDC Client (Client Authentication)"
   enabled                      = true
@@ -1260,14 +1261,14 @@ resource "keycloak_openid_client" "argocd" {
   pkce_code_challenge_method               = var.keycloak_enable_pkce ? "S256" : null
   exclude_session_state_from_auth_response = false
 
-  depends_on = [keycloak_realm.argocd]
+  # depends_on = [keycloak_realm.argocd]
 }
 
 # PKCE Client (Public Flow, for CLI authentication)
 resource "keycloak_openid_client" "argocd_pkce" {
   count = var.deploy_hub && var.enable_keycloak && var.keycloak_enable_pkce ? 1 : 0
 
-  realm_id                     = keycloak_realm.argocd[0].id
+  realm_id                     = var.keycloak_realm
   client_id                    = var.keycloak_client_id
   name                         = "ArgoCD OIDC Client (PKCE)"
   enabled                      = true
@@ -1304,7 +1305,7 @@ resource "keycloak_openid_client" "argocd_pkce" {
   # PKCE Configuration
   pkce_code_challenge_method = "S256"
 
-  depends_on = [keycloak_realm.argocd]
+  # depends_on = [keycloak_realm.argocd]
 }
 
 # =============================================================================
@@ -1318,7 +1319,7 @@ resource "keycloak_openid_client" "argocd_pkce" {
 # Groups Client Scope - Required for group claim in token
 resource "keycloak_openid_client_scope" "groups" {
   count                  = var.deploy_hub && var.enable_keycloak ? 1 : 0
-  realm_id               = keycloak_realm.argocd[0].id
+  realm_id               = var.keycloak_realm
   name                   = "groups"
   description            = "Group membership claim for ArgoCD authorization"
   include_in_token_scope = true
@@ -1329,7 +1330,7 @@ resource "keycloak_openid_client_scope" "groups" {
 resource "keycloak_openid_group_membership_protocol_mapper" "groups_mapper" {
   count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
-  realm_id        = keycloak_realm.argocd[0].id
+  realm_id        = var.keycloak_realm
   client_scope_id = keycloak_openid_client_scope.groups[0].id
   name            = "group-membership"
   claim_name      = "groups"
@@ -1343,7 +1344,7 @@ resource "keycloak_openid_group_membership_protocol_mapper" "groups_mapper" {
 resource "keycloak_openid_client_default_scopes" "argocd" {
   count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
-  realm_id  = keycloak_realm.argocd[0].id
+  realm_id  = var.keycloak_realm
   client_id = var.keycloak_enable_pkce ? one(keycloak_openid_client.argocd_pkce[*].id) : one(keycloak_openid_client.argocd[*].id)
 
   default_scopes = [
@@ -1365,19 +1366,19 @@ resource "keycloak_openid_client_default_scopes" "argocd" {
 # Create default ArgoCD admin group
 resource "keycloak_group" "argocd_admins" {
   count    = var.deploy_hub && var.enable_keycloak ? 1 : 0
-  realm_id = keycloak_realm.argocd[0].id
+  realm_id = var.keycloak_realm
   name     = "ArgoCDAdmins"
 }
 
 resource "keycloak_group" "argocd_developers" {
   count    = var.deploy_hub && var.enable_keycloak ? 1 : 0
-  realm_id = keycloak_realm.argocd[0].id
+  realm_id = var.keycloak_realm
   name     = "ArgoCDDevelopers"
 }
 
 resource "keycloak_group" "argocd_viewers" {
   count    = var.deploy_hub && var.enable_keycloak ? 1 : 0
-  realm_id = keycloak_realm.argocd[0].id
+  realm_id = var.keycloak_realm
   name     = "ArgoCDViewers"
 }
 
@@ -1395,7 +1396,7 @@ resource "random_password" "keycloak_admin_password" {
 
 resource "keycloak_user" "argocd_admin" {
   count          = var.deploy_hub && var.enable_keycloak && var.create_default_admin_user ? 1 : 0
-  realm_id       = keycloak_realm.argocd[0].id
+  realm_id       = var.keycloak_realm
   username       = var.default_admin_username
   enabled        = true
   email          = var.default_admin_email
@@ -1427,7 +1428,7 @@ resource "null_resource" "set_admin_password" {
       
       # Get admin access token
       echo "→ Authenticating as Keycloak admin..."
-      TOKEN_RESPONSE=$(curl -sSL -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
+      TOKEN_RESPONSE=$(curl -sSL -X POST "$KEYCLOAK_URL/realms/$REALM/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=$KEYCLOAK_USER" \
         -d "password=$KEYCLOAK_PASSWORD" \
@@ -1437,7 +1438,7 @@ resource "null_resource" "set_admin_password" {
       if [ $? -ne 0 ]; then
         echo "✗ ERROR: Failed to connect to Keycloak"
         echo "Response: $TOKEN_RESPONSE"
-        echo "Please set password manually: $KEYCLOAK_URL/admin/master/console/#/$REALM/users/$USER_ID"
+        echo "Please set password manually: $KEYCLOAK_URL/admin/$REALM/console/#/users/$USER_ID"
         exit 1
       fi
       
@@ -1447,7 +1448,7 @@ resource "null_resource" "set_admin_password" {
         echo "✗ ERROR: Failed to obtain access token"
         echo "Response: $TOKEN_RESPONSE"
         echo "Please verify Keycloak credentials and set password manually"
-        echo "Keycloak URL: $KEYCLOAK_URL/admin/master/console/#/$REALM/users/$USER_ID"
+        echo "Keycloak URL: $KEYCLOAK_URL/admin/$REALM/console/#/users/$USER_ID"
         exit 1
       fi
       
@@ -1473,7 +1474,7 @@ resource "null_resource" "set_admin_password" {
       else
         echo "✗ ERROR: Failed to set password (HTTP $HTTP_CODE)"
         echo "Response: $BODY"
-        echo "Please set password manually: $KEYCLOAK_URL/admin/master/console/#/$REALM/users/$USER_ID"
+        echo "Please set password manually: $KEYCLOAK_URL/admin/$REALM/console/#/users/$USER_ID"
         exit 1
       fi
     EOT
@@ -1492,7 +1493,7 @@ resource "null_resource" "set_admin_password" {
 # Add admin user to ArgoCDAdmins group
 resource "keycloak_user_groups" "argocd_admin_groups" {
   count    = var.deploy_hub && var.enable_keycloak && var.create_default_admin_user ? 1 : 0
-  realm_id = keycloak_realm.argocd[0].id
+  realm_id = var.keycloak_realm
   user_id  = keycloak_user.argocd_admin[0].id
   group_ids = [
     keycloak_group.argocd_admins[0].id
@@ -1664,7 +1665,7 @@ resource "null_resource" "hub_keycloak_restart_server" {
 
 output "keycloak_realm_id" {
   description = "Keycloak realm ID"
-  value       = var.enable_keycloak && var.deploy_hub ? keycloak_realm.argocd[0].id : null
+  value       = var.enable_keycloak && var.deploy_hub ? var.keycloak_realm : null
 }
 
 output "keycloak_client_id_output" {
