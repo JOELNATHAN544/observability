@@ -23,6 +23,7 @@ provider "keycloak" {
   url       = var.keycloak_url
   username  = var.keycloak_user
   password  = var.keycloak_password
+  realm     = var.keycloak_realm
 }
 
 # Spoke cluster providers are configured dynamically
