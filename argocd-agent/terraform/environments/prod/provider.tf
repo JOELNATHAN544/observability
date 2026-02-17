@@ -19,7 +19,7 @@ provider "helm" {
 }
 
 provider "keycloak" {
-  client_id = "admin-cli"
+  client_id = var.keycloak_provider_client_id
   url       = var.keycloak_url
   username  = var.keycloak_user
   password  = var.keycloak_password
