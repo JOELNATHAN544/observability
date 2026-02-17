@@ -4,6 +4,7 @@
 # - Hub cluster deployment (ArgoCD control plane + Agent Principal)
 # - Remote state management in Google Cloud Storage
 # - Integrated deployment verification with PKI setup
+# Trigger: Update for Keycloak existing realm integration verification
 name: Deploy ArgoCD Hub (GKE)
 
 on:
@@ -32,6 +33,7 @@ on:
   push:
     branches:
       - 'main'
+      - 'pipeline/Argocd'
     paths:
       - "argocd-agent/terraform/**"
       - ".github/workflows/deploy-argocd-hub-gke.yaml"
