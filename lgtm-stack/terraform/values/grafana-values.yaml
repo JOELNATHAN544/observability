@@ -82,6 +82,12 @@ grafana.ini:
     login_attribute_path: username
     name_attribute_path: full_name
 
+    # CRITICAL: Allows Keycloak users (like 'admin') to map to existing
+    # Grafana users (like the built-in 'admin' account) based on email.
+    # Without this, logging in as 'admin' via Keycloak fails with "user not found"
+    # because it refuses to overwrite the local admin account.
+    oauth_allow_insecure_email_lookup: true
+
     # Keycloak OIDC endpoints
     auth_url: ${keycloak_url}/realms/${keycloak_realm}/protocol/openid-connect/auth
     token_url: ${keycloak_url}/realms/${keycloak_realm}/protocol/openid-connect/token
