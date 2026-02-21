@@ -37,6 +37,8 @@ permissions:
   contents: read
   pull-requests: write
   id-token: write
+  actions: write
+
 
 env:
   TERRAFORM_VERSION: '1.6.0'
