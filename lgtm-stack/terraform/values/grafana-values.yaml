@@ -57,10 +57,10 @@ grafana.ini:
     # Keep login form enabled during initial rollout so the local
     # admin account remains accessible as a fallback.
     # Set to 'true' once SSO is confirmed stable.
-    disable_login_form: false
+    disable_login_form: true
     # Set to 'true' to skip Grafana's own login page and go
     # directly to Keycloak on every visit.
-    oauth_auto_login: false
+    oauth_auto_login: true
     # Prevent anonymous access to any dashboard.
     disable_signout_menu: false
 
