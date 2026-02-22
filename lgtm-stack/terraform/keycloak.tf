@@ -36,7 +36,10 @@ resource "keycloak_openid_client" "grafana" {
   admin_url = "https://grafana.${var.monitoring_domain}"
 
   valid_redirect_uris = [
-    "https://grafana.${var.monitoring_domain}/login/generic_oauth"
+    "https://grafana.${var.monitoring_domain}/login/generic_oauth",
+    # Required for KC 18+ post-logout redirect to function correctly.
+    # Must perfectly match the post_logout_redirect_uri parameter sent by Grafana.
+    "https://grafana.${var.monitoring_domain}/login"
   ]
 
   web_origins = [

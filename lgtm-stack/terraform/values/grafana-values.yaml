@@ -114,7 +114,9 @@ grafana.ini:
 
     # Single Logout: after signing out of Grafana, the user is
     # also logged out of Keycloak and redirected back to login.
-    signout_redirect_url: ${keycloak_url}/realms/${keycloak_realm}/protocol/openid-connect/logout?post_logout_redirect_uri=https%3A%2F%2Fgrafana.${monitoring_domain}%2Flogin
+    # OpenID RP-Initiated Logout (KC 18+) requires the client_id to be sent 
+    # to authorize the post_logout_redirect_uri.
+    signout_redirect_url: ${keycloak_url}/realms/${keycloak_realm}/protocol/openid-connect/logout?client_id=grafana-oauth&post_logout_redirect_uri=https%3A%2F%2Fgrafana.${monitoring_domain}%2Flogin
 
 datasources:
   datasources.yaml:
