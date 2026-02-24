@@ -8,7 +8,7 @@ lokiCanary:
   enabled: false
 
 loki:
-  auth_enabled: false
+  auth_enabled: true
 
   storage:
     type: %{ if cloud_provider == "gke" }gcs%{ else }s3%{ endif }
