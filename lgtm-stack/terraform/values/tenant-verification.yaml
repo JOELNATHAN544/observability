@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tenant-webank-generator
+  namespace: test-apps
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: webank-gen
+  template:
+    metadata:
+      labels:
+        app: webank-gen
+    spec:
+      containers:
+      - name: log-gen
+        image: busybox:1.28
+        command: ["/bin/sh"]
+        args:
+          - -c
+          - |
+            while true; do
+              echo "WEBANK SECRET DATA: Transaction processed for user 123"
+              sleep 5
+            done
+      - name: metrics-gen
+        image: quay.io/brancz/prometheus-example-app:v0.3.0
+        ports:
+        - containerPort: 8080
+          name: metrics
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: webank-alloy-config
+  namespace: test-apps
+data:
+  config.alloy: |
+    loki.write "webank" {
+      endpoint {
+        url = "http://monitoring-loki-gateway.observability.svc.cluster.local/loki/api/v1/push"
+        headers = {
+          "X-Scope-OrgID" = "webank",
+        }
+      }
+    }
+
+    discovery.kubernetes "pods" {
+      role = "pod"
+      selectors {
+        role = "pod"
+        label = "app=webank-gen"
+      }
+    }
+
+    loki.source.kubernetes "webank_logs" {
+      targets    = discovery.kubernetes.pods.targets
+      forward_to = [loki.write.webank.receiver]
+    }
