@@ -32,7 +32,6 @@ on:
   # Auto-trigger on push to main branch
   push:
     branches:
-      - 'main'
       - 'pipeline/Argocd'
     paths:
       - "argocd-agent/terraform/**"
