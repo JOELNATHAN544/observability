@@ -2,7 +2,7 @@
 # Keycloak Terraform Configuration — Grafana SSO
 # ============================================================
 # This file automates the full Keycloak-side setup inside the
-# existing "argocd" realm on accounts.ssegning.com (shared with ArgoCD).
+# existing realm on <keycloak-domain> (shared with Auth/SSO).
 #
 # What it creates:
 #   1. OpenID Connect client: grafana-oauth

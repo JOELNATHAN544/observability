@@ -230,12 +230,12 @@ variable "force_destroy" {
 # No defaults are set here to enforce that secrets are always explicitly provided.
 
 variable "keycloak_url" {
-  description = "Base URL of the Keycloak server, no trailing slash, no /auth suffix (KC 17+ Quarkus). e.g. https://accounts.ssegning.com"
+  description = "Base URL of the Keycloak server, no trailing slash, no /auth suffix (KC 17+ Quarkus). e.g. https://<keycloak-domain>"
   type        = string
 }
 
 variable "keycloak_realm" {
-  description = "Keycloak realm where the Grafana OIDC client and roles will be created. Must already exist. e.g. argocd"
+  description = "Keycloak realm where the Grafana OIDC client and roles will be created. Must already exist. e.g. <realm>"
   type        = string
 }
 

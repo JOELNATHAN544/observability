@@ -56,7 +56,7 @@ Because Keycloak is the strict source of truth, any roles assigned manually with
 
 **To grant a user access to Grafana:**
 1. A System Administrator must log into the Keycloak Admin Console.
-2. Navigate to the target Realm (e.g., `argocd`).
+2. Navigate to the target Realm (e.g., `<realm>`).
 3. Create the user or locate an existing user.
 4. Navigate to the user's **Groups** tab.
 5. Join the user to either `grafana-admins`, `grafana-editors`, or `grafana-viewers`.
@@ -66,8 +66,8 @@ Upon their next login, Grafana will automatically sync the user and grant them t
 ## 5. Required CI/CD Secrets
 For this configuration to deploy successfully via GitHub Actions, the following secrets must be present in the repository:
 
-1. `KEYCLOAK_URL` (e.g., `https://accounts.ssegning.com`)
-2. `KEYCLOAK_REALM` (e.g., `argocd`)
+1. `KEYCLOAK_URL` (e.g., `https://<keycloak-domain>/<realm>.com`)
+2. `KEYCLOAK_REALM` (e.g., `<realm>`)
 3. `KEYCLOAK_ADMIN_USER` 
 4. `KEYCLOAK_ADMIN_PASSWORD` 
 5. `GRAFANA_KEYCLOAK_USER` (The dedicated Grafana admin username)

@@ -73,7 +73,7 @@ provider "keycloak" {
   client_id = "admin-cli"
   username  = var.keycloak_admin_user
   password  = var.keycloak_admin_password
-  url       = var.keycloak_url  # https://accounts.ssegning.com
+  url       = var.keycloak_url # https://<keycloak-domain>
   realm     = var.keycloak_realm
 
   # base_path is NOT set — correct for Keycloak 17+ (Quarkus distribution)
@@ -348,11 +348,11 @@ resource "helm_release" "grafana" {
       ingress_class_name        = var.ingress_class_name
       cert_issuer_name          = var.cert_issuer_name
       # Keycloak OAuth2 — URL and realm for grafana.ini endpoint construction
-      keycloak_url              = var.keycloak_url
-      keycloak_realm            = var.keycloak_realm
+      keycloak_url   = var.keycloak_url
+      keycloak_realm = var.keycloak_realm
       # Client secret is read directly from the Keycloak Terraform resource
       # (no manual copy-paste or separate secret management needed)
-      keycloak_client_secret    = keycloak_openid_client.grafana.client_secret
+      keycloak_client_secret = keycloak_openid_client.grafana.client_secret
     })
   ]
 
