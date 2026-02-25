@@ -24,7 +24,7 @@ on:
   push:
     branches:
       - main
-      - feat/5-Implement-data-isolation-and-multitenancy
+      - feat/5-Implement-data-isolation-and-multitenancy 
     paths:
       - 'lgtm-stack/terraform/**'
       - '.github/workflows/deploy-lgtm-gke.yaml'
