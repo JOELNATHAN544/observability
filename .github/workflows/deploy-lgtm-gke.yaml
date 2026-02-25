@@ -161,7 +161,7 @@ jobs:
           grafana_keycloak_password = "${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}"
           EOF
 
-      # Critical Step: Generate execution plan and capture exit code (0=no change, 2=changes)
+      # Critical Step: Generate execution plan and capture exit code (0=no change, 1=error, 2=changes)
       - name: Terraform Plan
         id: plan
         working-directory: ${{ env.WORKING_DIR }}
@@ -171,6 +171,12 @@ jobs:
           EXIT_CODE=$?
           set -e
           echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+          
+          if [ "$EXIT_CODE" -eq 1 ]; then
+            echo "❌ Terraform Plan failed with errors."
+            exit 1
+          fi
+          
           terraform show tfplan > plan.txt
           exit 0
 
