@@ -36,8 +36,9 @@ ingress:
 env:
   # Feature flags:
   #   publicDashboards - allows sharing dashboards publicly
-  #   accesscontrol    - enables datasource-level and folder-level permissions
-  #                      per Grafana Team (required for multi-tenancy isolation)
+  #   accesscontrol    - enables Grafana access-control capabilities used by
+  #                      folder/team restrictions. Tenant datasource isolation is
+  #                      enforced primarily via per-tenant Grafana Organizations.
   GF_FEATURE_TOGGLES_ENABLE: publicDashboards accesscontrol
   GF_LOG_LEVEL: info
   # OAuth client secret passed via env var instead of grafana.ini to satisfy
@@ -114,8 +115,9 @@ grafana.ini:
     # This means every user MUST be in:
     #   1. ONE role group (grafana-admins / grafana-editors / grafana-viewers)
     #      → This controls WHAT they can do (login gate + Grafana role)
-    #   2. OPTIONALLY a tenant group (webank-team, azamra-team, etc.)
-    #      → This controls WHAT DATA they can see (datasource isolation)
+    #   2. ONE OR MORE tenant groups (webank-team, azamra-team, etc.)
+    #      → These groups are reconciled by the sync job into tenant org/team
+    #        membership, which controls WHAT DATA they can see.
     #
     # Example: a webank employee should be in:
     #   - grafana-viewers  (gives them Viewer role, allows login)
@@ -123,18 +125,11 @@ grafana.ini:
     groups_attribute_path: groups
     allowed_groups: grafana-admins grafana-editors grafana-viewers
 
-    # ---- Team Sync (Multi-Tenancy) ----
-    # When a user has a tenant group in their JWT (e.g. "webank-team"),
-    # Grafana automatically adds them to the matching Grafana Team.
-    # This is how tenant isolation is enforced without hardcoding users.
-    #
-    # Example JWT groups claim:
-    #   "groups": ["grafana-editors", "webank-team"]
-    #              ^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^
-    #              Grafana role        Tenant team
-    #
-    # Result: user can only query Webank-Loki, Webank-Mimir, etc.
-    # The role (editor) and team (webank) are fully independent.
+    # ---- Tenant Sync (Multi-Tenancy) ----
+    # Keycloak tenant groups are reconciled to Grafana tenant organizations
+    # and teams by the external sync CronJob (grafana-team-sync.py).
+    # OAuth here handles login + role mapping; tenant data boundaries are
+    # applied by organization membership and org-scoped datasources.
     skip_org_role_sync: false
 
     # Single Logout: after signing out of Grafana, the user is
@@ -146,5 +141,4 @@ grafana.ini:
 # Datasources are managed by Terraform (see grafana.tf)
 # Do not provision datasources via Helm chart to avoid conflicts
 datasources: {}
-
 

@@ -103,13 +103,11 @@ grafana_url = "https://grafana.<monitoring-domain>"
 # ------------------------------------------------------------------------------
 # Tenant Configuration (Multi-Tenancy)
 # ------------------------------------------------------------------------------
-# Add a tenant name here to automatically:
-#   - Create a Keycloak group "<tenant>-team"
-#   - Create a Grafana Team  "<tenant>-team" (synced from Keycloak)
-#   - Add scoped datasources (Loki/Mimir/Tempo/Prometheus) for the tenant
-#   - Restrict those datasources to only the tenant's Grafana Team
-#   - Create a Dashboard Folder visible only to that team
+# Tenants are discovered dynamically from Keycloak groups by the sync CronJob.
+# Any Keycloak group that matches "<tenant><tenant_group_suffix>" is treated as a tenant.
 #
-# To add a new tenant: just append to the list and redeploy.
-# Example: tenants = ["webank", "azamra", "gik"]
-tenants = ["webank"]
+# Example with default suffix:
+#   webank-team  -> tenant "webank"
+#
+# Change this only if your Keycloak tenant groups use a different suffix.
+tenant_group_suffix = "-team"

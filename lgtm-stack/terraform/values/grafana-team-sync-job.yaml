@@ -4,14 +4,14 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: grafana-sync-sa
-  namespace: observability
+  namespace: ${namespace}
 ---
 # Role: allow reading and patching the two Secrets the sync script manages
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: grafana-sync-secret-patcher
-  namespace: observability
+  namespace: ${namespace}
 rules:
   - apiGroups: [""]
     resources: ["secrets"]
@@ -24,11 +24,11 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: grafana-sync-secret-patcher
-  namespace: observability
+  namespace: ${namespace}
 subjects:
   - kind: ServiceAccount
     name: grafana-sync-sa
-    namespace: observability
+    namespace: ${namespace}
 roleRef:
   kind: Role
   name: grafana-sync-secret-patcher
@@ -39,7 +39,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: grafana-team-sync-script
-  namespace: observability
+  namespace: ${namespace}
 data:
   grafana-team-sync.py: |
     ${script_content}
@@ -49,7 +49,7 @@ apiVersion: batch/v1
 kind: CronJob
 metadata:
   name: grafana-team-sync
-  namespace: observability
+  namespace: ${namespace}
 spec:
   schedule: "*/5 * * * *"
   concurrencyPolicy: Forbid
@@ -84,29 +84,27 @@ spec:
 
                 # ── Grafana ────────────────────────────────────────────────
                 - name: GRAFANA_URL
-                  value: "http://monitoring-grafana.observability.svc.cluster.local:80"
+                  value: "http://monitoring-grafana.${namespace}.svc.cluster.local:80"
                 - name: GRAFANA_ADMIN_PASSWORD
                   value: "${grafana_admin_password}"
 
                 # ── Backend service URLs (in-cluster) ─────────────────────
                 - name: LOKI_GATEWAY_URL
-                  value: "http://monitoring-loki-gateway.observability.svc.cluster.local:80"
+                  value: "http://monitoring-loki-gateway.${namespace}.svc.cluster.local:80"
                 - name: MIMIR_URL
-                  value: "http://monitoring-mimir-nginx.observability.svc.cluster.local:80/prometheus"
+                  value: "http://monitoring-mimir-nginx.${namespace}.svc.cluster.local:80/prometheus"
                 - name: TEMPO_URL
-                  value: "http://monitoring-tempo-query-frontend.observability.svc.cluster.local:3200"
-                - name: PROMETHEUS_URL
-                  value: "http://monitoring-prometheus-server.observability.svc.cluster.local:80"
+                  value: "http://monitoring-tempo-query-frontend.${namespace}.svc.cluster.local:3200"
 
                 # ── Kubernetes ─────────────────────────────────────────────
                 - name: K8S_NAMESPACE
-                  value: "observability"
+                  value: "${namespace}"
 
                 # ── Tenant discovery ───────────────────────────────────────
                 # Groups ending with this suffix are treated as tenants.
                 # e.g. "webank-team" → tenant "webank"
                 - name: TENANT_GROUP_SUFFIX
-                  value: "-team"
+                  value: "${tenant_group_suffix}"
 
               volumeMounts:
                 - name: script-volume

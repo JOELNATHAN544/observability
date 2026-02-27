@@ -10,7 +10,8 @@
 #   3. Realm roles: admin, editor, viewer (mapped to groups)
 #   4. Protocol mappers: realm roles + groups into JWT
 #   5. A dedicated Grafana admin user (the one set via var.grafana_keycloak_user)
-#   6. [MULTI-TENANCY] Tenant groups: one "<tenant>-team" per entry in var.tenants
+#   6. [MULTI-TENANCY] Tenant groups are managed in Keycloak and discovered
+#      dynamically by the Grafana sync job using tenant_group_suffix.
 #
 # Role vs Team — they are completely independent:
 #   - Role (grafana-admins/editors/viewers) = WHAT the user can DO in Grafana
@@ -178,9 +179,8 @@ resource "keycloak_user" "grafana_admin" {
   }
 }
 
-# Add the dedicated user to the grafana-admins and webank-team groups
-# This gives the user full Grafana Admin rights (can manage users, settings, etc.)
-# while still being a member of webank-team for organizational purposes.
+# Add the dedicated user to the grafana-admins group
+# This gives the user full Grafana Admin rights (can manage users, settings, etc.).
 # Note: Grafana Admins bypass datasource and folder permissions, so they can see
 # all tenants' data. If you want to restrict them to only webank data, use
 # grafana-editors instead.

@@ -57,7 +57,6 @@ resource "grafana_data_source" "global_mimir" {
   http_headers = { "X-Scope-OrgID" = "default" }
   depends_on   = [helm_release.grafana, null_resource.wait_for_grafana]
 }
-
 # ---- Bootstrap K8s Secrets for the sync script ----------------
 # The sync script writes to these Secrets. Terraform creates
 # them empty so the Loki gateway and script can start cleanly.
@@ -107,8 +106,8 @@ resource "kubernetes_secret" "grafana_tenant_passwords" {
 
 # ---- OSS Team Sync CronJob -----------------------------------
 # Runs every 5 minutes. Discovers all *-team groups in Keycloak,
-# provisions Grafana resources (team + 4 datasources + folder +
-# folder permissions) for each, and syncs users.
+# provisions Grafana resources (org + team + tenant datasources +
+# folder + folder permissions) for each, and syncs users.
 
 # Read the Python sync script
 data "local_file" "grafana_sync_script" {
@@ -123,6 +122,8 @@ locals {
     keycloak_admin_user     = var.keycloak_admin_user
     keycloak_admin_password = var.keycloak_admin_password
     grafana_admin_password  = var.grafana_admin_password
+    namespace               = var.namespace
+    tenant_group_suffix     = var.tenant_group_suffix
     script_content          = indent(4, data.local_file.grafana_sync_script.content)
   })
 }
