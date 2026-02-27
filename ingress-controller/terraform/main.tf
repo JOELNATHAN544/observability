@@ -104,6 +104,11 @@ resource "helm_release" "nginx_ingress" {
     value = "${var.release_name}-nginx-ingress"
   }
 
+  set {
+    name  = "controller.enableCertManager"
+    value = "true"
+  }
+
   # Wait for the LoadBalancer to be ready
   wait    = true
   timeout = 600
