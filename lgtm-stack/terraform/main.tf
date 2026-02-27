@@ -279,6 +279,8 @@ resource "helm_release" "loki" {
     module.cloud_gke,
     module.eks_storage
   ]
+
+  timeout = 1200
 }
 
 # Mimir

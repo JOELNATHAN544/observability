@@ -99,6 +99,12 @@ spec:
                 # ── Kubernetes ─────────────────────────────────────────────
                 - name: K8S_NAMESPACE
                   value: "${namespace}"
+                - name: REMOVE_USERS_FROM_MAIN_ORG
+                  value: "true"
+                - name: GRAFANA_MAIN_ORG_ID
+                  value: "1"
+                - name: SET_CURRENT_ORG_ON_SYNC
+                  value: "false"
 
                 # ── Tenant discovery ───────────────────────────────────────
                 # Groups ending with this suffix are treated as tenants.

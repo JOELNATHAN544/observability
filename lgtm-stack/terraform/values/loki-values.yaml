@@ -168,6 +168,12 @@ gateway:
           access_log /dev/stderr main;
           server {
             listen 8080;
+            # Kubernetes readiness probe in this chart can hit "/".
+            # Return 200 here so probe does not fail with 401.
+            location = / {
+              add_header Content-Type text/plain;
+              return 200 "ok";
+            }
             location ~ ^/(loki/api/v1/push|loki/api/v1/tail|ready|log) {
               proxy_pass http://monitoring-loki-distributor.observability.svc.cluster.local:3100;
               proxy_http_version 1.1;

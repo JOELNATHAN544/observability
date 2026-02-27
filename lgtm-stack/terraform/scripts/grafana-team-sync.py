@@ -78,12 +78,19 @@ GLOBAL_SCOPE_TENANT = os.getenv("GLOBAL_SCOPE_TENANT", "default")
 
 # Group discovery
 TENANT_GROUP_SUFFIX = os.getenv("TENANT_GROUP_SUFFIX", "-team")
+KEYCLOAK_GRAFANA_ADMIN_ROLE = os.getenv("KEYCLOAK_GRAFANA_ADMIN_ROLE", "grafana-admin")
+KEYCLOAK_GRAFANA_EDITOR_ROLE = os.getenv("KEYCLOAK_GRAFANA_EDITOR_ROLE", "grafana-editor")
+KEYCLOAK_GRAFANA_VIEWER_ROLE = os.getenv("KEYCLOAK_GRAFANA_VIEWER_ROLE", "grafana-viewer")
+REMOVE_USERS_FROM_MAIN_ORG = os.getenv("REMOVE_USERS_FROM_MAIN_ORG", "true").lower() in {"1", "true", "yes"}
+GRAFANA_MAIN_ORG_ID = int(os.getenv("GRAFANA_MAIN_ORG_ID", "1"))
+SET_CURRENT_ORG_ON_SYNC = os.getenv("SET_CURRENT_ORG_ON_SYNC", "false").lower() in {"1", "true", "yes"}
 
 log.info(
-    "Configuration: Keycloak realm=%s, tenant suffix=%s, global tenant=%s",
+    "Configuration: Keycloak realm=%s, tenant suffix=%s, global tenant=%s, set_current_org=%s",
     KEYCLOAK_REALM,
     TENANT_GROUP_SUFFIX,
     GLOBAL_SCOPE_TENANT,
+    SET_CURRENT_ORG_ON_SYNC,
 )
 
 
@@ -140,9 +147,15 @@ def generate_password(length: int = 32) -> str:
 def make_htpasswd_entry(username: str, password: str) -> str:
     """Return one htpasswd line for username/password."""
     try:
-        from passlib.hash import bcrypt
-        hashed = bcrypt.using(rounds=12).hash(password)
-    except ImportError:
+        from passlib.hash import bcrypt as passlib_bcrypt
+        hashed = passlib_bcrypt.using(rounds=12).hash(password)
+    except Exception as exc:
+        # passlib+bcrypt can fail at runtime with some bcrypt releases.
+        log.warning(
+            "passlib bcrypt failed for user '%s': %s; falling back to sha512-crypt.",
+            username,
+            exc,
+        )
         import crypt
         hashed = crypt.crypt(password, crypt.mksalt(crypt.METHOD_SHA512))
     return f"{username}:{hashed}"
@@ -266,6 +279,31 @@ def get_keycloak_group_members(token: str, group_id: str) -> list[dict]:
             "email": email.strip().lower(),
         })
     return members
+
+
+def get_keycloak_user_realm_roles(token: str, user_id: str | None) -> set[str]:
+    """Return a user's effective Keycloak realm role names."""
+    if not user_id:
+        return set()
+    url = f"{KEYCLOAK_URL}/admin/realms/{KEYCLOAK_REALM}/users/{user_id}/role-mappings/realm/composite"
+    headers = {"Authorization": f"Bearer {token}"}
+    resp = requests.get(url, headers=headers, timeout=20)
+    resp.raise_for_status()
+    return {role.get("name", "") for role in resp.json() if role.get("name")}
+
+
+def map_grafana_role_from_keycloak_roles(roles: set[str]) -> str:
+    """
+    Map Keycloak realm roles to Grafana org roles.
+    Admin > Editor > Viewer precedence.
+    """
+    if KEYCLOAK_GRAFANA_ADMIN_ROLE in roles:
+        return "Admin"
+    if KEYCLOAK_GRAFANA_EDITOR_ROLE in roles:
+        return "Editor"
+    if KEYCLOAK_GRAFANA_VIEWER_ROLE in roles:
+        return "Viewer"
+    return "Viewer"
 
 
 # --------------------------------------------------------------------
@@ -412,7 +450,43 @@ def add_user_to_org(org_id: int, login_or_email: str, role: str = "Viewer"):
 
 
 def remove_user_from_org(org_id: int, user_id: int):
-    grafana_request("DELETE", f"/api/orgs/{org_id}/users/{user_id}")
+    grafana_request("DELETE", f"/api/orgs/{org_id}/users/{user_id}", allow_status={404})
+
+
+def ensure_user_role_in_org(org_id: int, user_id: int, login_or_email: str, desired_role: str):
+    """
+    Ensure user's role in org matches desired_role.
+    Some Grafana versions reject PATCH for externally synced users;
+    in that case, re-create org membership with the desired role.
+    """
+    users = get_org_users(org_id)
+    current = next((user for user in users if user.get("userId") == user_id), None)
+    if not current:
+        add_user_to_org(org_id, login_or_email, role=desired_role)
+        return
+
+    current_role = current.get("role")
+    if current_role == desired_role:
+        return
+
+    resp = grafana_request(
+        "PATCH",
+        f"/api/orgs/{org_id}/users/{user_id}",
+        payload={"role": desired_role},
+        allow_status={403},
+    )
+    if resp.status_code != 403:
+        log.info("Updated role for user_id=%s in org %s: %s -> %s", user_id, org_id, current_role, desired_role)
+        return
+
+    log.info(
+        "PATCH role update blocked for user_id=%s in org %s; re-creating membership as %s",
+        user_id,
+        org_id,
+        desired_role,
+    )
+    remove_user_from_org(org_id, user_id)
+    add_user_to_org(org_id, login_or_email, role=desired_role)
 
 
 def set_user_current_org(user_id: int, org_id: int):
@@ -462,10 +536,19 @@ def add_user_to_grafana_team(team_id: int, user_id: int, org_id: int):
         f"/api/teams/{team_id}/members",
         payload={"userId": user_id},
         org_id=org_id,
-        allow_status={409},
+        allow_status={400, 409},
     )
     if resp.status_code == 409:
         return
+    if resp.status_code == 400:
+        message = ""
+        try:
+            message = str(resp.json().get("message", "")).lower()
+        except ValueError:
+            message = resp.text.lower()
+        if "already added" in message:
+            return
+        resp.raise_for_status()
 
 
 def remove_user_from_grafana_team(team_id: int, user_id: int, org_id: int):
@@ -644,7 +727,7 @@ def provision_tenant(tenant: str, password: str, global_password: str) -> tuple[
     return org_id, team_id
 
 
-def sync_tenant_users(tenant: str, org_id: int, team_id: int, kc_members: list[dict]):
+def sync_tenant_users(tenant: str, org_id: int, team_id: int, kc_members: list[dict], kc_token: str):
     """Sync Keycloak group members -> Grafana org members + team members."""
     team_name = f"{tenant}{TENANT_GROUP_SUFFIX}"
     desired_members = {
@@ -665,16 +748,24 @@ def sync_tenant_users(tenant: str, org_id: int, team_id: int, kc_members: list[d
     desired_user_ids: list[int] = []
 
     for email in desired_emails:
-        user_id = ensure_grafana_user(desired_members[email])
+        member = desired_members[email]
+        user_id = ensure_grafana_user(member)
         if not user_id:
             log.warning("User %s could not be reconciled in Grafana; skipping.", email)
             continue
 
         desired_user_ids.append(user_id)
+        kc_roles = get_keycloak_user_realm_roles(kc_token, member.get("id"))
+        desired_role = map_grafana_role_from_keycloak_roles(kc_roles)
 
         try:
-            add_user_to_org(org_id, email, role="Viewer")
-            set_user_current_org(user_id, org_id)
+            ensure_user_role_in_org(org_id, user_id, email, desired_role)
+            # Keep this optional so users with multi-org membership can choose
+            # their preferred org in Grafana UI without sync overriding it.
+            if SET_CURRENT_ORG_ON_SYNC:
+                set_user_current_org(user_id, org_id)
+            if REMOVE_USERS_FROM_MAIN_ORG and desired_role != "Admin" and org_id != GRAFANA_MAIN_ORG_ID:
+                remove_user_from_org(GRAFANA_MAIN_ORG_ID, user_id)
         except Exception as exc:
             log.error("Failed adding user %s to org %s: %s", email, org_id, exc)
 
@@ -760,12 +851,13 @@ def main():
 
     for tenant, ids in provisioned.items():
         try:
-            sync_tenant_users(
-                tenant=tenant,
-                org_id=ids["org_id"],
-                team_id=ids["team_id"],
-                kc_members=tenant_members.get(tenant, []),
-            )
+                sync_tenant_users(
+                    tenant=tenant,
+                    org_id=ids["org_id"],
+                    team_id=ids["team_id"],
+                    kc_members=tenant_members.get(tenant, []),
+                    kc_token=kc_token,
+                )
         except Exception as exc:
             log.error("User sync failed for tenant '%s': %s", tenant, exc, exc_info=True)
 

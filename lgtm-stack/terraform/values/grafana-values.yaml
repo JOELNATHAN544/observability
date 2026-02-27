@@ -69,10 +69,16 @@ grafana.ini:
     # Prevent anonymous access to any dashboard.
     disable_signout_menu: false
 
+  users:
+    # Prevent automatic membership in Main Org. for OAuth users.
+    # Tenant org membership is managed by grafana-team-sync.py.
+    auto_assign_org: false
+
   auth.generic_oauth:
     enabled: true
     name: Keycloak-OAuth
-    allow_sign_up: true
+    # Users are provisioned by the sync job, not auto-created at login.
+    allow_sign_up: false
 
     # Client ID only — secret is passed via GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
     # env var above to satisfy assertNoLeakedSecrets (Grafana Helm chart v7+).
@@ -130,7 +136,8 @@ grafana.ini:
     # and teams by the external sync CronJob (grafana-team-sync.py).
     # OAuth here handles login + role mapping; tenant data boundaries are
     # applied by organization membership and org-scoped datasources.
-    skip_org_role_sync: false
+    # Keep org role/membership managed by the sync job (source of truth).
+    skip_org_role_sync: true
 
     # Single Logout: after signing out of Grafana, the user is
     # also logged out of Keycloak and redirected back to login.
@@ -141,4 +148,3 @@ grafana.ini:
 # Datasources are managed by Terraform (see grafana.tf)
 # Do not provision datasources via Helm chart to avoid conflicts
 datasources: {}
-
