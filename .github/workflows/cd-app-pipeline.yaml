@@ -1,4 +1,4 @@
-name: "🚀 Build & Deploy (GitOps)"
+name: "Build & Deploy (GitOps)"
 
 on:
   # This is a TEMPLATE — copy it into your own app repo and set your trigger.
@@ -8,7 +8,7 @@ on:
   #   workflow_dispatch:   # Manual trigger from the GitHub Actions UI
   workflow_dispatch:
 
-# ── ✏️  CONFIGURE THESE  ──────────────────────────────────────────────────────
+# ── CONFIGURE THESE ─────────────────────────────────────────────────────────
 env:
   # 1. Container registry (ghcr.io = GitHub, docker.io = Docker Hub)
   REGISTRY: ghcr.io
@@ -30,17 +30,17 @@ jobs:
       packages: write   # Push image to GHCR
 
     steps:
-      - name: "📥 Checkout app code"
+      - name: "Checkout app code"
         uses: actions/checkout@v4
 
-      - name: "🔑 Log in to registry"
+      - name: "Log in to registry"
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}   # Automatically provided by GitHub — no setup needed
 
-      - name: "🏷️ Generate image tags"
+      - name: "Generate image tags"
         id: meta
         uses: docker/metadata-action@v5
         with:
@@ -49,10 +49,10 @@ jobs:
             type=sha,prefix=sha-,format=short    # e.g. sha-a1b2c3d
             type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
-      - name: "⚙️ Set up Docker Buildx"
+      - name: "Set up Docker Buildx"
         uses: docker/setup-buildx-action@v3
 
-      - name: "🐳 Build & push image"
+      - name: "Build & push image"
         id: push
         uses: docker/build-push-action@v5
         with:
@@ -70,29 +70,29 @@ jobs:
     steps:
       # Checkout the GITOPS repo (not this one)
       # Requires secret: GITOPS_REPO_PAT
-      - name: "📥 Checkout GitOps repo"
+      - name: "Checkout GitOps repo"
         uses: actions/checkout@v4
         with:
           repository: ${{ env.GITOPS_REPO }}
           token: ${{ secrets.GITOPS_REPO_PAT }}
           path: gitops-repo
 
-      - name: "✍️ Update image tag in deployment.yaml"
+      - name: "Update image tag in deployment.yaml"
         run: |
           # Build the new image reference (lowercase, with SHA tag)
           NEW_IMAGE="${{ env.REGISTRY }}/${{ github.repository_owner }}/$(basename ${{ github.repository }}):sha-$(echo ${{ github.sha }} | cut -c1-7)"
           NEW_IMAGE=$(echo $NEW_IMAGE | tr '[:upper:]' '[:lower:]')
 
-          echo "🏷️  New image: $NEW_IMAGE"
+          echo "New image: $NEW_IMAGE"
 
           # Replace the "image:" line in the manifest
           sed -i "s|image: .*|image: $NEW_IMAGE|g" gitops-repo/deployment.yaml
 
-      - name: "📤 Commit & push to GitOps repo"
+      - name: "Commit & push to GitOps repo"
         run: |
           cd gitops-repo
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add deployment.yaml
-          git commit -m "🚀 deploy: update image → sha-${{ github.sha }}" || echo "Nothing to commit"
+          git commit -m "deploy: update image → sha-${{ github.sha }}" || echo "Nothing to commit"
           git push

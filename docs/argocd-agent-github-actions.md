@@ -18,12 +18,12 @@ Two workflows automate the deployment:
 
 Before running workflows, ensure:
 
-- [ ] ✅ Netbird account created
-- [ ] ✅ Spoke clusters installed Netbird and registered (persistent peers)
-- [ ] ✅ GitHub runners setup key created (ephemeral)
-- [ ] ✅ ACLs configured (`github-runners` → `spoke-clusters`, TCP port 6443)
-- [ ] ✅ GKE cluster exists for hub deployment
-- [ ] ✅ All GitHub Secrets configured (see [Netbird Setup Guide](netbird-setup-guide.md#6-github-secrets-configuration))
+- [ ] Netbird account created
+- [ ] Spoke clusters installed Netbird and registered (persistent peers)
+- [ ] GitHub runners setup key created (ephemeral)
+- [ ] ACLs configured (`github-runners` → `spoke-clusters`, TCP port 6443)
+- [ ] GKE cluster exists for hub deployment
+- [ ] All GitHub Secrets configured (see [Netbird Setup Guide](netbird-setup-guide.md#6-github-secrets-configuration))
 
 ---
 
@@ -79,7 +79,7 @@ After successful deployment:
 
 **Example output**:
 ```
-📊 Deployment Summary:
+Deployment Summary:
 {
   "argocd_url": "https://argocd.example.com",
   "principal_address": "34.123.45.67",
@@ -99,7 +99,7 @@ After successful deployment, you can verify the deployment details in the workfl
 
 **Example output**:
 ```
-📊 Deployment Summary:
+Deployment Summary:
 {
   "argocd_url": "https://argocd.example.com",
   "principal_address": "34.123.45.67",
@@ -155,16 +155,16 @@ Check the **"Verify ArgoCD Spoke deployment"** step output:
 Verifying spoke-2...
 ═══════════════════════════════════════════════════════════
 1. Checking namespace...
-   ✅ Namespace exists
+    Namespace exists
 2. Checking ArgoCD pods...
-   ✅ All pods ready
+    All pods ready
 3. Checking agent connection...
-   ✅ Agent connected to principal
+    Agent connected to principal
 4. Checking certificates...
-   ✅ Client certificate exists
-   ✅ CA certificate exists
+    Client certificate exists
+    CA certificate exists
 
-✅ All spoke clusters deployed and connected successfully!
+All spoke clusters deployed and connected successfully!
 ```
 
 ---
@@ -195,10 +195,10 @@ Use `adopt_existing_resources=true` when:
 ════════════════════════════════════════════════════════════════
 Checking for existing ArgoCD resources to import...
 ════════════════════════════════════════════════════════════════
-✓ Found existing argocd namespace
+Found existing argocd namespace
 Importing into Terraform state...
 Successfully imported kubernetes_namespace.hub_argocd
-✓ Found existing ArgoCD Helm release
+Found existing ArgoCD Helm release
 ════════════════════════════════════════════════════════════════
 Import check complete! Proceeding with Terraform operations...
 ════════════════════════════════════════════════════════════════
@@ -487,10 +487,10 @@ kubectl get pods -n guestbook-helm --context spoke-2
 **Q: How do I verify spoke clusters are successfully connected?**
 
 **A:** Check the workflow logs for the "Verify ArgoCD Spoke deployment" step. Look for all green checkmarks:
-- ✅ Namespace exists
-- ✅ All pods ready
-- ✅ Agent connected to principal
-- ✅ Client certificate exists
+- Namespace exists
+- All pods ready
+- Agent connected to principal
+- Client certificate exists
 
 Or verify manually: `kubectl --context=spoke-2 logs -n argocd -l app.kubernetes.io/name=argocd-agent --tail=20 | grep "connected"`
 

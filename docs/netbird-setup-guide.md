@@ -492,10 +492,10 @@ sudo netstat -tlnp | grep 6443
 
 Once Netbird setup is complete:
 
-1. ✅ Spoke clusters registered in Netbird
-2. ✅ Setup keys created and stored in GitHub Secrets
-3. ✅ ACLs configured
-4. ✅ Spoke Netbird IPs and credentials stored in GitHub Secrets
+1. Spoke clusters registered in Netbird
+2. Setup keys created and stored in GitHub Secrets
+3. ACLs configured
+4. Spoke Netbird IPs and credentials stored in GitHub Secrets
 
 **You're ready to run the GitHub Actions workflows!**
 
