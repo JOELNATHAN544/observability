@@ -4,7 +4,7 @@ This document describes how the LGTM (Loki, Grafana, Tempo, Mimir) stack impleme
 
 ---
 
-## 🏗️ Core Architecture Overview
+## Core Architecture Overview
 
 Our architecture follows a "shared-service, separate-storage" model. While the core monitoring components (Loki, Mimir, etc.) are shared, data is logically isolated using a **Tenant ID** (OrgID) that is enforced at every layer.
 
@@ -19,7 +19,7 @@ graph TD
     end
 
     subgraph "Grafana (Access Layer)"
-        GT["Grafana Teams<br/>(Restricted Access)"]
+        GT["Grafana Organizations<br/>(Full Isolation)"]
         DS["Tenant DataSources<br/>(Header-injected)"]
     end
 
@@ -36,7 +36,7 @@ graph TD
 
 ---
 
-## 🔑 The Three Pillars of Isolation
+## The Three Pillars of Isolation
 
 ### 1. Data Isolation (The "OrgID" Header)
 Loki, Mimir, and Tempo are configured with `multitenancy_enabled: true`. This turns on a mandatory HTTP header: `X-Scope-OrgID`.
@@ -51,25 +51,26 @@ We use Keycloak as our SSO provider. Tenant membership is defined by **Keycloak 
 
 - Any group ending in `-team` (e.g., `test-team`) is automatically discovered.
 - When a user logs in via OIDC, Grafana receives their group memberships in the JWT `groups` claim.
-- **User Sync**: The system ensures users belong ONLY to their assigned tenant teams in Grafana.
+- **User Sync**: The system ensures users belong ONLY to their assigned tenant organizations and teams in Grafana.
 
-### 3. Visual Isolation (Grafana Teams & Permissions)
-Grafana is the "Lens" through which users see data. We use **Access Control** to ensure users only see their own lens.
+### 3. Visual Isolation (Grafana Organizations & Teams)
+Grafana is the "Lens" through which users see data. We use **Organizations** to ensure users only see their own lens.
 
-- **Teams**: Every tenant gets a dedicated Grafana Team.
+- **Organizations**: Every tenant gets a dedicated Grafana Organization. This is the strongest form of isolation in Grafana OSS.
+- **Teams**: Inside each organization, a team is created for more granular permissioning if needed.
 - **Permissions**:
-    - **DataSources**: The "Test-Loki" datasource is permission-locked to the "test-team".
-    - **Folders**: Dashboards for a tenant live in a folder accessible only by that tenant's team.
-    - **Isolation**: Users from "test-team" cannot even see the existence of other tenants' datasources or folders.
+    - **DataSources**: The "Test-Loki" datasource is only accessible within the "test-team" organization.
+    - **Folders**: Dashboards for a tenant live in a folder accessible only by that tenant's organization.
+    - **Isolation**: Users from one tenant cannot even see the existence of other tenants' datasources or folders because they are in separate organizations.
 
 ---
 
-## 🤖 Automation: The `grafana-team-sync` Job
+## Automation: The `grafana-team-sync` Job
 
 To eliminate manual configuration, a Python-based **CronJob** runs every 5 minutes in the cluster. It performs the following "Zero-Touch" provisioning:
 
 1.  **Discovery**: Scans Keycloak for all groups ending in `-team`.
-2.  **Team Provisioning**: Creates a matching Team in Grafana if it doesn't exist.
+2.  **Organization & Team Provisioning**: Creates a matching Organization and Team in Grafana if they don't exist.
 3.  **DataSource Provisioning**: Automatically creates Loki, Mimir, Tempo, and Prometheus datasources for each tenant, pre-configured with the correct `X-Scope-OrgID`.
 4.  **Folder Provisioning**: Creates a dedicated Dashboard Folder for the tenant.
 5.  **Access Control**: Grants the newly created Team "Viewer" or "Editor" permissions to their specific Folder and DataSources.
@@ -77,18 +78,18 @@ To eliminate manual configuration, a Python-based **CronJob** runs every 5 minut
 
 ---
 
-## 🚀 How to Add a New Tenant
+## How to Add a New Tenant
 
 Because of the automation, adding a tenant is a purely "Identity" action:
 
 1.  **In Keycloak**: Create a new group called `mytenant-team`.
 2.  **Assign Users**: Add the desired users to this group.
-3.  **Wait**: Within 5 minutes, the sync job will have provisioned `Mytenant-Loki`, the `Mytenant-team` in Grafana, and the `Mytenant Dashboards` folder.
-4.  **Login**: Users can now log in to Grafana and will only see their tenant's resources.
+3.  **Wait**: Within 5 minutes, the sync job will have provisioned the `Mytenant-team` organization in Grafana, along with `Mytenant-Loki` and the `Mytenant Dashboards` folder.
+4.  **Login**: Users can now log in to Grafana and will automatically land in their tenant's organization.
 
 ---
 
-## 🛡️ Security Note: The Gateway Layer
+## Security Note: The Gateway Layer
 All log ingestion traffic passes through an **NGINX Gateway** that enforces:
 - **Authentication**: Basic Auth against the dynamically synced `.htpasswd`.
 - **Tenant Validation**: Ensuring the `X-Scope-OrgID` matches the authenticated user.
