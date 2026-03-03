@@ -103,6 +103,44 @@ jobs:
         working-directory: ${{ env.WORKING_DIR }}
         run: terraform init
 
+      - name: Remove Grafana and Keycloak resources from state
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          echo "🗑️ Removing Grafana and Keycloak resources from Terraform state..."
+          
+          # Remove all Grafana provider resources from state
+          terraform state list | grep -E '^grafana_' | while read -r resource; do
+            echo "  Removing: $resource"
+            terraform state rm "$resource" || true
+          done
+          
+          # Remove all Keycloak provider resources from state
+          terraform state list | grep -E '^keycloak_' | while read -r resource; do
+            echo "  Removing: $resource"
+            terraform state rm "$resource" || true
+          done
+          
+          echo "✅ Grafana and Keycloak resources removed from state"
+
+      - name: Pre-destroy cleanup - Remove stuck resources
+        run: |
+          echo "🧹 Cleaning up stuck resources before Terraform destroy..."
+          
+          # Delete stuck Grafana pods
+          kubectl delete pod -n observability -l app.kubernetes.io/name=grafana --force --grace-period=0 || true
+          
+          # Delete grafana-team-sync CronJob and Jobs
+          kubectl delete cronjob -n observability grafana-team-sync || true
+          kubectl delete jobs -n observability -l app=grafana-team-sync || true
+          
+          # Delete Grafana Helm release entirely
+          helm uninstall monitoring-grafana -n observability || true
+          
+          # Remove finalizers from stuck resources
+          kubectl patch helmrelease -n observability monitoring-grafana -p '{"metadata":{"finalizers":[]}}' --type=merge || true
+          
+          echo "✅ Pre-cleanup complete"
+
       - name: Get GKE Cluster Info
         if: inputs.cloud_provider == 'gke'
         id: cluster_info
@@ -115,7 +153,23 @@ jobs:
       - name: Terraform Destroy
         working-directory: ${{ env.WORKING_DIR }}
         run: |
-          terraform destroy -auto-approve \
+          # Construct URLs from monitoring domain if not explicitly set
+          GRAFANA_URL="${{ secrets.GRAFANA_URL }}"
+          KEYCLOAK_URL="${{ secrets.KEYCLOAK_URL }}"
+          
+          if [ -z "$GRAFANA_URL" ]; then
+            GRAFANA_URL="https://grafana.${{ secrets.MONITORING_DOMAIN }}"
+          fi
+          
+          if [ -z "$KEYCLOAK_URL" ]; then
+            KEYCLOAK_URL="https://keycloak.${{ secrets.MONITORING_DOMAIN }}"
+          fi
+          
+          echo "Using Grafana URL: $GRAFANA_URL"
+          echo "Using Keycloak URL: $KEYCLOAK_URL"
+          
+          # Destroy with actual Keycloak/Grafana credentials from secrets
+          terraform destroy -auto-approve -refresh=false \
             -var="cloud_provider=${{ inputs.cloud_provider }}" \
             -var="environment=${{ secrets.ENVIRONMENT }}" \
             -var="monitoring_domain=${{ secrets.MONITORING_DOMAIN }}" \
@@ -127,7 +181,15 @@ jobs:
             -var="region=${{ secrets.REGION }}" \
             -var="force_destroy=${{ inputs.destroy_storage }}" \
             -var="gke_endpoint=${{ steps.cluster_info.outputs.endpoint || '' }}" \
-            -var="gke_ca_certificate=${{ steps.cluster_info.outputs.ca_cert || '' }}"
+            -var="gke_ca_certificate=${{ steps.cluster_info.outputs.ca_cert || '' }}" \
+            -var="keycloak_url=$KEYCLOAK_URL" \
+            -var="keycloak_realm=${{ secrets.KEYCLOAK_REALM }}" \
+            -var="keycloak_admin_user=${{ secrets.KEYCLOAK_ADMIN_USER }}" \
+            -var="keycloak_admin_password=${{ secrets.KEYCLOAK_PASSWORD }}" \
+            -var="grafana_keycloak_user=${{ secrets.GRAFANA_KEYCLOAK_USER }}" \
+            -var="grafana_keycloak_email=${{ secrets.GRAFANA_KEYCLOAK_EMAIL }}" \
+            -var="grafana_keycloak_password=${{ secrets.GRAFANA_KEYCLOAK_PASSWORD }}" \
+            -var="grafana_url=$GRAFANA_URL"
 
 
       - name: Clean up storage buckets - GKE
@@ -135,17 +197,32 @@ jobs:
         run: |
           PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
           for bucket in loki-chunks loki-ruler mimir-blocks mimir-ruler tempo-traces; do
-            BUCKET_NAME="${PROJECT_ID}-${bucket}"
+            BUCKET_NAME="${PROJECT_ID}-${bucket}-v1"
             echo "🗑️ Deleting bucket: $BUCKET_NAME"
             gsutil -m rm -r "gs://${BUCKET_NAME}" || true
           done
+
+      - name: Post-destroy cleanup - Remove namespace and PVCs
+        run: |
+          echo "🧹 Final cleanup..."
+          
+          # Delete all PVCs in observability namespace
+          kubectl delete pvc -n observability --all --force --grace-period=0 || true
+          
+          # Delete the namespace (will cascade delete everything)
+          kubectl delete namespace observability --force --grace-period=0 || true
+          
+          # Wait for namespace deletion
+          kubectl wait --for=delete namespace/observability --timeout=120s || true
+          
+          echo "✅ Namespace and PVCs cleaned up"
 
       - name: Clean up storage buckets - EKS
         if: inputs.cloud_provider == 'eks' && inputs.destroy_storage == true
         run: |
           PROJECT_ID="${{ secrets.GCP_PROJECT_ID }}"
           for bucket in loki-chunks loki-ruler mimir-blocks mimir-ruler tempo-traces; do
-            BUCKET_NAME="${PROJECT_ID}-${bucket}"
+            BUCKET_NAME="${PROJECT_ID}-${bucket}-v1"
             echo "🗑️ Deleting S3 bucket: $BUCKET_NAME"
             aws s3 rb "s3://${BUCKET_NAME}" --force || true
           done

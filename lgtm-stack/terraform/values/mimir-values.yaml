@@ -7,7 +7,7 @@ serviceAccount:
 
 mimir:
   structuredConfig:
-    multitenancy_enabled: false
+    multitenancy_enabled: true
 
     common:
       storage:

@@ -8,6 +8,7 @@ serviceAccount:
 
 # Global Overrides
 global_overrides:
+  multitenancy_enabled: true
   per_tenant_override_config: /runtime-config/overrides.yaml
   defaults:
     metrics_generator:

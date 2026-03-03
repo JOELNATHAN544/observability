@@ -17,6 +17,26 @@ terraform {
       source  = "mrparkers/keycloak"
       version = "~> 4.0"
     }
+    grafana = {
+      source  = "grafana/grafana"
+      version = "~> 3.0"
+    }
+    kubectl = {
+      source  = "gavinbunney/kubectl"
+      version = ">= 1.14.0"
+    }
+    null = {
+      source  = "hashicorp/null"
+      version = "~> 3.0"
+    }
+    local = {
+      source  = "hashicorp/local"
+      version = "~> 2.4"
+    }
+    template = {
+      source  = "hashicorp/template"
+      version = "~> 2.2"
+    }
   }
 
   # Production Best Practice: Store state remotely
@@ -29,6 +49,16 @@ terraform {
 provider "google" {
   project = var.project_id != "" ? var.project_id : null
   region  = var.region
+}
+
+# Grafana Provider
+# ---------------------------------------------------------------
+# Manages Grafana Teams, Datasource Permissions and Folder Permissions
+# via the Grafana HTTP API. Uses basic auth so no manual token is needed.
+# ---------------------------------------------------------------
+provider "grafana" {
+  url  = var.grafana_url
+  auth = "admin:${var.grafana_admin_password}"
 }
 
 # AWS provider - required by EKS module even when not used (count=0)
@@ -49,6 +79,13 @@ provider "kubernetes" {
   host                   = var.cloud_provider == "gke" ? "https://${var.gke_endpoint}" : null
   token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
   cluster_ca_certificate = var.cloud_provider == "gke" && var.gke_ca_certificate != "" ? base64decode(var.gke_ca_certificate) : null
+}
+
+provider "kubectl" {
+  host                   = var.cloud_provider == "gke" ? "https://${var.gke_endpoint}" : null
+  token                  = var.cloud_provider == "gke" ? data.google_client_config.default[0].access_token : null
+  cluster_ca_certificate = var.cloud_provider == "gke" && var.gke_ca_certificate != "" ? base64decode(var.gke_ca_certificate) : null
+  load_config_file       = false
 }
 
 provider "helm" {
@@ -75,6 +112,9 @@ provider "keycloak" {
   password  = var.keycloak_admin_password
   url       = var.keycloak_url # https://<keycloak-domain>
   realm     = var.keycloak_realm
+
+  # Prevent "context deadline exceeded" errors in CI/CD networking environments
+  client_timeout = 60
 
   # base_path is NOT set — correct for Keycloak 17+ (Quarkus distribution)
   # If you see 404 errors on init, the instance may be legacy Wildfly;
@@ -181,6 +221,12 @@ module "cert_manager" {
   issuer_namespace   = var.namespace
   ingress_class_name = var.ingress_class_name
 
+  # Pass GKE credentials for module-internal providers
+  gke_endpoint       = var.gke_endpoint
+  gke_ca_certificate = var.gke_ca_certificate
+  project_id         = var.project_id
+  region             = var.region
+
   # Ensure namespace exists before issuer creation (handled inside module)
 }
 
@@ -193,6 +239,12 @@ module "ingress_nginx" {
   release_name          = var.nginx_ingress_release_name
   namespace             = var.nginx_ingress_namespace
   ingress_class_name    = var.ingress_class_name
+
+  # Pass GKE credentials for module-internal providers
+  gke_endpoint       = var.gke_endpoint
+  gke_ca_certificate = var.gke_ca_certificate
+  project_id         = var.project_id
+  region             = var.region
 }
 
 # Loki
@@ -227,6 +279,8 @@ resource "helm_release" "loki" {
     module.cloud_gke,
     module.eks_storage
   ]
+
+  timeout = 1200
 }
 
 # Mimir
@@ -376,7 +430,8 @@ resource "kubernetes_ingress_v1" "monitoring_stack" {
     namespace = kubernetes_namespace.observability.metadata[0].name
     annotations = merge(
       {
-        "nginx.org/redirect-to-https"     = "true"
+        "nginx.org/redirect-to-https"     = "false"
+        "nginx.org/ssl-redirect"          = "false"
         "nginx.org/proxy-connect-timeout" = "300s"
         "nginx.org/proxy-read-timeout"    = "300s"
         "nginx.org/proxy-send-timeout"    = "300s"
@@ -529,6 +584,7 @@ resource "kubernetes_ingress_v1" "tempo_grpc" {
     annotations = merge(
       {
         "nginx.org/redirect-to-https"     = "false"
+        "nginx.org/ssl-redirect"          = "false"
         "nginx.org/proxy-connect-timeout" = "300s"
         "nginx.org/proxy-read-timeout"    = "300s"
         "nginx.org/proxy-send-timeout"    = "300s"
@@ -539,6 +595,7 @@ resource "kubernetes_ingress_v1" "tempo_grpc" {
   }
 
   spec {
+    ingress_class_name = var.ingress_class_name
     tls {
       hosts = [
         "tempo-grpc.${var.monitoring_domain}"
