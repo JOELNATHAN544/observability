@@ -80,3 +80,34 @@ cert_manager_namespace     = "cert-manager"
 nginx_ingress_version      = "4.14.1"
 nginx_ingress_release_name = "nginx-monitoring"
 nginx_ingress_namespace    = "ingress-nginx"
+
+# ------------------------------------------------------------------------------
+# Keycloak SSO (Required for Grafana authentication)
+# All values are injected at runtime via GitHub Secrets → CI/CD.
+# ------------------------------------------------------------------------------
+keycloak_url            = "https://<keycloak-domain>"
+keycloak_realm          = "<realm>"
+keycloak_admin_user     = "<realm-admin-username>"
+keycloak_admin_password = "SET_VIA_GITHUB_SECRET"
+
+grafana_keycloak_user     = "<grafana-admin-username>"
+grafana_keycloak_email    = "<grafana-admin-email>"
+grafana_keycloak_password = "SET_VIA_GITHUB_SECRET"
+
+# ------------------------------------------------------------------------------
+# Grafana Provider (Required for multi-tenancy: Teams, Permissions, Folders)
+# ------------------------------------------------------------------------------
+# The URL must be publicly reachable so Terraform can call the Grafana HTTP API.
+grafana_url = "https://grafana.<monitoring-domain>"
+
+# ------------------------------------------------------------------------------
+# Tenant Configuration (Multi-Tenancy)
+# ------------------------------------------------------------------------------
+# Tenants are discovered dynamically from Keycloak groups by the sync CronJob.
+# Any Keycloak group that matches "<tenant><tenant_group_suffix>" is treated as a tenant.
+#
+# Example with default suffix:
+#   webank-team  -> tenant "webank"
+#
+# Change this only if your Keycloak tenant groups use a different suffix.
+tenant_group_suffix = "-team"

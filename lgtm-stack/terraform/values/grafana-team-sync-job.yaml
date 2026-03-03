@@ -1,0 +1,121 @@
+---
+# ServiceAccount for the sync job (needs K8s Secret read/write access)
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: grafana-sync-sa
+  namespace: ${namespace}
+---
+# Role: allow reading and patching the two Secrets the sync script manages
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: grafana-sync-secret-patcher
+  namespace: ${namespace}
+rules:
+  - apiGroups: [""]
+    resources: ["secrets"]
+    resourceNames:
+      - "loki-tenant-htpasswd"      # nginx htpasswd file
+      - "grafana-tenant-passwords"  # stable per-tenant passwords
+    verbs: ["get", "create", "patch", "update"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: grafana-sync-secret-patcher
+  namespace: ${namespace}
+subjects:
+  - kind: ServiceAccount
+    name: grafana-sync-sa
+    namespace: ${namespace}
+roleRef:
+  kind: Role
+  name: grafana-sync-secret-patcher
+  apiGroup: rbac.authorization.k8s.io
+---
+# ConfigMap to hold the Python synchronization script
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-team-sync-script
+  namespace: ${namespace}
+data:
+  grafana-team-sync.py: |
+    ${script_content}
+---
+# CronJob to execute the script every 5 minutes
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: grafana-team-sync
+  namespace: ${namespace}
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: grafana-sync-sa
+          containers:
+            - name: sync-job
+              image: python:3.11-alpine
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  pip install --quiet requests kubernetes passlib bcrypt && \
+                  python /scripts/grafana-team-sync.py
+              env:
+                # ── Keycloak ───────────────────────────────────────────────
+                # Uses var.keycloak_url from Terraform (= secrets.KEYCLOAK_URL in CI)
+                # This is the external Keycloak URL — NOT an in-cluster hostname.
+                - name: KEYCLOAK_URL
+                  value: "${keycloak_url}"
+                - name: KEYCLOAK_REALM
+                  value: "${keycloak_realm}"
+                - name: KEYCLOAK_USERNAME
+                  value: "${keycloak_admin_user}"
+                - name: KEYCLOAK_PASSWORD
+                  value: "${keycloak_admin_password}"
+
+                # ── Grafana ────────────────────────────────────────────────
+                - name: GRAFANA_URL
+                  value: "http://monitoring-grafana.${namespace}.svc.cluster.local:80"
+                - name: GRAFANA_ADMIN_PASSWORD
+                  value: "${grafana_admin_password}"
+
+                # ── Backend service URLs (in-cluster) ─────────────────────
+                - name: LOKI_GATEWAY_URL
+                  value: "http://monitoring-loki-gateway.${namespace}.svc.cluster.local:80"
+                - name: MIMIR_URL
+                  value: "http://monitoring-mimir-nginx.${namespace}.svc.cluster.local:80/prometheus"
+                - name: TEMPO_URL
+                  value: "http://monitoring-tempo-query-frontend.${namespace}.svc.cluster.local:3200"
+
+                # ── Kubernetes ─────────────────────────────────────────────
+                - name: K8S_NAMESPACE
+                  value: "${namespace}"
+                - name: REMOVE_USERS_FROM_MAIN_ORG
+                  value: "true"
+                - name: GRAFANA_MAIN_ORG_ID
+                  value: "1"
+                - name: SET_CURRENT_ORG_ON_SYNC
+                  value: "false"
+
+                # ── Tenant discovery ───────────────────────────────────────
+                # Groups ending with this suffix are treated as tenants.
+                # e.g. "webank-team" → tenant "webank"
+                - name: TENANT_GROUP_SUFFIX
+                  value: "${tenant_group_suffix}"
+
+              volumeMounts:
+                - name: script-volume
+                  mountPath: /scripts
+          volumes:
+            - name: script-volume
+              configMap:
+                name: grafana-team-sync-script

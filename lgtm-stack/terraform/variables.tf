@@ -269,3 +269,35 @@ variable "grafana_keycloak_password" {
   type        = string
   sensitive   = true
 }
+
+# ---- Grafana Provider Variables --------------------------------
+# Used by the grafana Terraform provider to manage Teams,
+# Datasource Permissions and Dashboard Folder Permissions via
+# the Grafana HTTP API after the Helm chart is deployed.
+#
+# IMPORTANT: The service account token must be created manually
+# the first time in Grafana UI (Admin → Service Accounts) and
+# then stored as the GRAFANA_SERVICE_ACCOUNT_TOKEN GitHub Secret.
+# All subsequent changes are managed by Terraform.
+
+variable "grafana_url" {
+  description = "External URL of the Grafana instance (e.g. https://grafana.<domain>). Used by the grafana Terraform provider."
+  type        = string
+}
+
+# ---- Tenant Discovery Configuration --------------------------
+# Tenants are discovered DYNAMICALLY from Keycloak by the sync script.
+# Any Keycloak group whose name ends with `tenant_group_suffix` is
+# treated as a tenant (e.g. "webank-team" → tenant "webank").
+#
+# To add a new tenant:
+#   1. Create a `<name>-team` group in Keycloak
+#   2. Add users to the group
+#   3. Wait up to 5 minutes for the CronJob to sync
+# No Terraform changes or redeploys are needed.
+
+variable "tenant_group_suffix" {
+  description = "Suffix used to identify tenant groups in Keycloak (e.g. '-team' means 'webank-team' → tenant 'webank')"
+  type        = string
+  default     = "-team"
+}

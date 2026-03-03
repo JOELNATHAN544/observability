@@ -1,11 +1,13 @@
 #!/bin/bash
-set -euo pipefail
+set -uo pipefail
 
 # Import existing Kubernetes resources into Terraform state
 # This prevents conflicts when deploying to an existing cluster
 
 NAMESPACE="${NAMESPACE:-observability}"
 REPORT_FILE="import-report.json"
+FAILURE_COUNT=0
+FAILED_OPERATIONS=()
 
 echo "🔍 Scanning for existing resources to import..."
 
@@ -31,7 +33,8 @@ cleanup_conflicting_resources() {
   
   # Get all resources of this type that match any of the keywords
   local pattern=$(echo "$keywords" | sed 's/,/|/g')
-  local resources=$(kubectl get "$resource_type" -o name | grep -E "$pattern" || true)
+  local resources
+  resources=$(kubectl get "$resource_type" -o name 2>/dev/null | grep -E "$pattern" || true)
   
   for res in $resources; do
     # Get owner using multiple methods
@@ -44,20 +47,28 @@ cleanup_conflicting_resources() {
     
     if [ -n "$ns_owner" ] && [ "$ns_owner" != "$NAMESPACE" ]; then
       echo "    ⚠️  CONFLICT: $res owned by '$ns_owner'. Deleting..."
-      kubectl delete "$res" --ignore-not-found --timeout=30s
+      if ! kubectl delete "$res" --ignore-not-found --timeout=30s 2>/dev/null; then
+        echo "    ❌ Failed to delete $res (continuing anyway)"
+        FAILURE_COUNT=$((FAILURE_COUNT+1))
+        FAILED_OPERATIONS+=("cleanup: kubectl delete $res")
+      fi
       deleted_any=true
     elif [ -z "$ns_owner" ]; then
       # Special case: Resource exists but no Helm owner. 
       # If it matches our exact release names, it's a "zombie" resource from a failed/partial manual install
       if [[ "$res" =~ monitoring-loki|monitoring-mimir|monitoring-tempo|monitoring-grafana|monitoring-prometheus ]]; then
         echo "    ⚠️  ZOMBIE RESOURCE: $res has no owner but matches stack pattern. Deleting to ensure clean install..."
-        kubectl delete "$res" --ignore-not-found --timeout=30s
+        if ! kubectl delete "$res" --ignore-not-found --timeout=30s 2>/dev/null; then
+          echo "    ❌ Failed to delete zombie resource $res (continuing anyway)"
+          FAILURE_COUNT=$((FAILURE_COUNT+1))
+          FAILED_OPERATIONS+=("cleanup: kubectl delete zombie $res")
+        fi
         deleted_any=true
       fi
     fi
   done
   
-  [ "$deleted_any" = true ] && sleep 5
+  [ "$deleted_any" = true ] && sleep 5 || true
 }
 
 # Deep Scan for all LGTM related cluster-scoped components
@@ -84,27 +95,34 @@ import_resource() {
     return 0
   else
     if grep -q "Resource already managed" /tmp/import.log; then
-      echo "    ℹ️  Already managed by Terraform"
+      echo "    ✅ Already managed by Terraform"
       jq --arg addr "$tf_address" --arg reason "already_managed" \
-        '.skipped += [{"address": $addr, "reason": $reason}]' \
+        '.imports += [{"address": $addr, "reason": $reason}]' \
         "$REPORT_FILE" > /tmp/report.tmp && mv /tmp/report.tmp "$REPORT_FILE"
+      return 0  # Return success instead of failure
     else
       echo "    ⚠️  Import failed (resource may not exist)"
       jq --arg addr "$tf_address" --arg error "$(cat /tmp/import.log | tail -5)" \
         '.errors += [{"address": $addr, "error": $error}]' \
         "$REPORT_FILE" > /tmp/report.tmp && mv /tmp/report.tmp "$REPORT_FILE"
+      return 1
     fi
-    return 1
   fi
 }
 
 # Check if namespace exists
 if kubectl get namespace "$NAMESPACE" &>/dev/null; then
   echo "📂 Found existing namespace: $NAMESPACE"
-  import_resource \
-    "kubernetes_namespace.observability" \
-    "$NAMESPACE" \
-    "Namespace: $NAMESPACE"
+  
+  # Check if already in Terraform state
+  if terraform state list | grep -q "kubernetes_namespace.observability"; then
+    echo "  ℹ️  Namespace already managed by Terraform - skipping import"
+  else
+    import_resource \
+      "kubernetes_namespace.observability" \
+      "$NAMESPACE" \
+      "Namespace: $NAMESPACE"
+  fi
 else
   echo "  ℹ️  Namespace $NAMESPACE does not exist (will be created)"
 fi
@@ -175,6 +193,30 @@ if [ "${CLOUD_PROVIDER:-}" == "gke" ]; then
   fi
 fi
 
+# ── Grafana Imports ─────────────────────────────────────────────────
+# Global datasources and other core Grafana resources would be imported here.
+# NOTE: Tenant teams, datasources, and folders are managed dynamically
+# by the grafana-team-sync CronJob, so they are NOT imported into Terraform.
+# ─────────────────────────────────────────────────────────────────────
+
+echo "📈 Scanning for existing Grafana resources to import into state..."
+
+if [ -n "${GRAFANA_URL:-}" ] && [ -n "${GRAFANA_ADMIN_PASSWORD:-}" ]; then
+  GRAFANA_AUTH="admin:${GRAFANA_ADMIN_PASSWORD}"
+  
+  # Test Grafana connectivity first
+  if ! curl -sf --user "$GRAFANA_AUTH" "${GRAFANA_URL}/api/health" >/dev/null 2>&1; then
+    echo "    ⚠️  Cannot reach Grafana API at ${GRAFANA_URL} - skipping Grafana imports"
+    FAILURE_COUNT=$((FAILURE_COUNT+1))
+    FAILED_OPERATIONS+=("grafana: API unreachable at ${GRAFANA_URL}")
+  else
+    echo "  ℹ️  Grafana API is reachable at ${GRAFANA_URL}"
+    # Future global Grafana resource imports can be added here
+  fi
+else
+  echo "⏭️  Skipping Grafana imports: GRAFANA_URL or GRAFANA_ADMIN_PASSWORD not set"
+fi
+
 # Summary
 echo ""
 echo "📊 Import Summary:"
@@ -185,6 +227,19 @@ ERRORS=$(jq '.errors | length' "$REPORT_FILE")
 echo "  ✅ Imported: $IMPORTED"
 echo "  ⏭️  Skipped: $SKIPPED"
 echo "  ❌ Errors: $ERRORS"
+
+# Report any failures that occurred during execution
+if [ "$FAILURE_COUNT" -gt 0 ]; then
+  echo ""
+  echo "⚠️  Failure Summary: $FAILURE_COUNT operation(s) failed but script continued"
+  echo "Failed operations:"
+  for op in "${FAILED_OPERATIONS[@]}"; do
+    echo "  - $op"
+  done
+  echo ""
+  echo "ℹ️  These failures were logged but did not prevent other imports from executing."
+  echo "ℹ️  Terraform apply will proceed and create any resources that failed to import."
+fi
 
 echo ""
 echo "📄 Full report saved to: $REPORT_FILE"

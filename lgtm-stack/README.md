@@ -42,6 +42,31 @@ Choose your preferred deployment approach:
 
 ---
 
+## Multi-Tenancy
+
+In a shared observability platform, different teams need access to their own logs, metrics, and traces — without being able to see each other's data. This stack solves that through a combination of **data isolation at the storage layer** (Loki, Mimir, Tempo), **identity management via Keycloak**, and **access control in Grafana** — all wired together automatically.
+
+The core principle is simple: each team is represented by a Keycloak group. The platform discovers those groups and provisions everything needed for that team — a dedicated Grafana Organization, scoped datasources, and a dashboards folder — without any manual steps.
+
+### How it works
+
+| Layer | Mechanism | Effect |
+|---|---|---|
+| **Data** | `X-Scope-OrgID` header on every request | Loki, Mimir, and Tempo store data in isolated per-tenant buckets |
+| **Identity** | Keycloak groups (`<name>-team`) | Single source of truth for tenant membership |
+| **Access** | Grafana Organizations + scoped datasources | Users can only query their own tenant's data |
+| **Automation** | `grafana-team-sync` CronJob (every 5 min) | Zero-touch provisioning — adding a Keycloak group is all it takes |
+
+### Adding a new tenant
+
+1. Create a group named `<name>-team` in Keycloak and assign users to it.
+2. Within 5 minutes, the sync job provisions the Grafana Organization, datasources (Loki, Mimir, Tempo), dashboard folder, and Loki gateway credentials.
+3. Users log in and land directly in their tenant's organization — isolated from all others.
+
+For a deeper look at the architecture and security model, see the [Multi-Tenancy Architecture Guide](../docs/multi-tenancy-architecture.md).
+
+---
+
 ## Operations
 
 - [Adopting Existing Stack](../docs/adopting-lgtm-stack.md) - Migrate existing monitoring stacks to Terraform management.
@@ -79,3 +104,4 @@ Select "Tempo" datasource and enter a Trace ID to visualize the request path.
 ## Additional Resources
 
 - [Terraform State Management](../docs/terraform-state-management.md)
+- [Multi-Tenancy Architecture](../docs/multi-tenancy-architecture.md)

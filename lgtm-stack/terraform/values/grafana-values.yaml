@@ -27,14 +27,19 @@ service:
   annotations: {} # Removing service annotations as they are moved to ingress
 
 ingress:
-  enabled: false
+  enabled: true
   ingressClassName: ${ingress_class_name}
   annotations:
     cert-manager.io/issuer: ${cert_issuer_name}
     external-dns.alpha.kubernetes.io/hostname: grafana.${monitoring_domain} # Replace with your Grafana domain name (e.g., grafana.yourdomain.com)
 
 env:
-  GF_FEATURE_TOGGLES_ENABLE: publicDashboards
+  # Feature flags:
+  #   publicDashboards - allows sharing dashboards publicly
+  #   accesscontrol    - enables Grafana access-control capabilities used by
+  #                      folder/team restrictions. Tenant datasource isolation is
+  #                      enforced primarily via per-tenant Grafana Organizations.
+  GF_FEATURE_TOGGLES_ENABLE: publicDashboards accesscontrol
   GF_LOG_LEVEL: info
   # OAuth client secret passed via env var instead of grafana.ini to satisfy
   # the Grafana Helm chart's assertNoLeakedSecrets validation (v7+).
@@ -64,10 +69,16 @@ grafana.ini:
     # Prevent anonymous access to any dashboard.
     disable_signout_menu: false
 
+  users:
+    # Prevent automatic membership in Main Org. for OAuth users.
+    # Tenant org membership is managed by grafana-team-sync.py.
+    auto_assign_org: false
+
   auth.generic_oauth:
     enabled: true
     name: Keycloak-OAuth
-    allow_sign_up: true
+    # Users are provisioned by the sync job, not auto-created at login.
+    allow_sign_up: false
 
     # Client ID only — secret is passed via GF_AUTH_GENERIC_OAUTH_CLIENT_SECRET
     # env var above to satisfy assertNoLeakedSecrets (Grafana Helm chart v7+).
@@ -103,14 +114,30 @@ grafana.ini:
     role_attribute_strict: true
 
     # ---- Group-Based Access Control (via groups[] claim) ----
-    # Only users in one of these groups can log in. Everyone else
-    # in the netbird realm is completely blocked from Grafana.
+    # IMPORTANT: allowed_groups is the LOGIN GATE — only users in one of
+    # these groups can access Grafana at all. Users NOT in any of these
+    # groups are COMPLETELY BLOCKED, even if they are in a tenant team.
+    #
+    # This means every user MUST be in:
+    #   1. ONE role group (grafana-admins / grafana-editors / grafana-viewers)
+    #      → This controls WHAT they can do (login gate + Grafana role)
+    #   2. ONE OR MORE tenant groups (webank-team, azamra-team, etc.)
+    #      → These groups are reconciled by the sync job into tenant org/team
+    #        membership, which controls WHAT DATA they can see.
+    #
+    # Example: a webank employee should be in:
+    #   - grafana-viewers  (gives them Viewer role, allows login)
+    #   - webank-team      (gives them access to Webank-* datasources only)
     groups_attribute_path: groups
     allowed_groups: grafana-admins grafana-editors grafana-viewers
 
-    # Enable refresh token usage so sessions persist.
-    # Requires 'offline_access' in scopes (already set above).
-    use_refresh_token: true
+    # ---- Tenant Sync (Multi-Tenancy) ----
+    # Keycloak tenant groups are reconciled to Grafana tenant organizations
+    # and teams by the external sync CronJob (grafana-team-sync.py).
+    # OAuth here handles login + role mapping; tenant data boundaries are
+    # applied by organization membership and org-scoped datasources.
+    # Keep org role/membership managed by the sync job (source of truth).
+    skip_org_role_sync: true
 
     # Single Logout: after signing out of Grafana, the user is
     # also logged out of Keycloak and redirected back to login.
@@ -118,49 +145,6 @@ grafana.ini:
     # to authorize the post_logout_redirect_uri.
     signout_redirect_url: ${keycloak_url}/realms/${keycloak_realm}/protocol/openid-connect/logout?client_id=grafana-oauth&post_logout_redirect_uri=https%3A%2F%2Fgrafana.${monitoring_domain}%2Flogin
 
-datasources:
-  datasources.yaml:
-    apiVersion: 1
-    datasources:
-      - name: Prometheus
-        type: prometheus
-        access: proxy
-        url: http://monitoring-prometheus-server:80
-        isDefault: true
-        jsonData:
-          httpMethod: POST
-          timeInterval: 15s
-
-      - name: Loki
-        type: loki
-        access: proxy
-        url: http://monitoring-loki-gateway:80
-        jsonData:
-          maxLines: 1000
-
-      - name: Mimir
-        type: prometheus
-        access: proxy
-        url: http://monitoring-mimir-nginx:80/prometheus
-        jsonData:
-          httpMethod: POST
-          timeInterval: 15s
-
-      - name: Tempo
-        type: tempo
-        access: proxy
-        url: http://monitoring-tempo-query-frontend:3200
-        jsonData:
-          httpMethod: GET
-          tracesToLogsV2: {}
-          datasourceUid: loki
-          spanStartTimeShift: '-1h'
-          spanEndTimeShift: '1h'
-          filterByTraceID: true
-          filterBySpanID: false
-        tracesToMetrics:
-          datasourceUid: prometheus
-        serviceMap:
-          datasourceUid: prometheus
-        nodeGraph:
-          enabled: true
+# Datasources are managed by Terraform (see grafana.tf)
+# Do not provision datasources via Helm chart to avoid conflicts
+datasources: {}

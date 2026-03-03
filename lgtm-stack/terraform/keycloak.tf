@@ -6,16 +6,30 @@
 #
 # What it creates:
 #   1. OpenID Connect client: grafana-oauth
-#   2. Keycloak groups: grafana-admins, grafana-editors, grafana-viewers
+#   2. Grafana role groups: grafana-admins, grafana-editors, grafana-viewers
 #   3. Realm roles: admin, editor, viewer (mapped to groups)
 #   4. Protocol mappers: realm roles + groups into JWT
-#   5. A dedicated Grafana admin user (separate from NetBird users)
+#   5. A dedicated Grafana admin user (the one set via var.grafana_keycloak_user)
+#   6. [MULTI-TENANCY] Tenant groups are managed in Keycloak and discovered
+#      dynamically by the Grafana sync job using tenant_group_suffix.
+#
+# Role vs Team — they are completely independent:
+#   - Role (grafana-admins/editors/viewers) = WHAT the user can DO in Grafana
+#     (create dashboards, change settings, view-only, etc.)
+#   - Team (<tenant>-team) = WHAT DATA the user can SEE
+#     (only the Loki/Mimir/Tempo data for their tenant)
+#
+#   A user can be a "grafana-editor" AND belong to "webank-team".
+#   That means: can create dashboards, but only with webank data.
 #
 # Access control:
 #   - Only users in a grafana-* group can access Grafana
 #   - Users NOT in any group are BLOCKED (strict mode)
 #   - Group membership determines Grafana role (Admin/Editor/Viewer)
+#   - Team membership determines which tenant data they see
 # ============================================================
+
+# ---- OPENID Connect Client -----------------------------------
 
 # ---- OpenID Connect Client -----------------------------------
 
@@ -157,9 +171,19 @@ resource "keycloak_user" "grafana_admin" {
     value     = var.grafana_keycloak_password
     temporary = false
   }
+
+  lifecycle {
+    ignore_changes = [
+      username
+    ]
+  }
 }
 
 # Add the dedicated user to the grafana-admins group
+# This gives the user full Grafana Admin rights (can manage users, settings, etc.).
+# Note: Grafana Admins bypass datasource and folder permissions, so they can see
+# all tenants' data. If you want to restrict them to only webank data, use
+# grafana-editors instead.
 resource "keycloak_user_groups" "grafana_admin_membership" {
   realm_id = var.keycloak_realm
   user_id  = keycloak_user.grafana_admin.id
