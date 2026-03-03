@@ -115,8 +115,8 @@ variable "keycloak_url" {
   default     = ""
 
   validation {
-    condition     = var.enable_keycloak ? var.keycloak_url != "" : true
-    error_message = "The keycloak_url is required when enable_keycloak is true."
+    condition     = var.keycloak_url == "" || can(regex("^https?://", var.keycloak_url))
+    error_message = "keycloak_url must start with http:// or https:// when set."
   }
 }
 
@@ -133,8 +133,8 @@ variable "keycloak_password" {
   default     = ""
 
   validation {
-    condition     = var.enable_keycloak ? var.keycloak_password != "" : true
-    error_message = "The keycloak_password is required when enable_keycloak is true."
+    condition     = var.keycloak_password == "" || length(trimspace(var.keycloak_password)) > 0
+    error_message = "keycloak_password must not be only whitespace."
   }
 }
 
@@ -150,8 +150,8 @@ variable "argocd_url" {
   default     = ""
 
   validation {
-    condition     = var.enable_keycloak ? var.argocd_url != "" : true
-    error_message = "The argocd_url is required when enable_keycloak is true."
+    condition     = var.argocd_url == "" || can(regex("^https?://", var.argocd_url))
+    error_message = "argocd_url must start with http:// or https:// when set."
   }
 }
 
@@ -195,6 +195,11 @@ variable "default_admin_password" {
   type        = string
   sensitive   = true
   default     = ""
+
+  validation {
+    condition     = !(var.enable_keycloak && var.create_default_admin_user && var.default_admin_password == "")
+    error_message = "The default_admin_password is required when create_default_admin_user is true. Set TF_VAR_default_admin_password environment variable."
+  }
 }
 
 variable "default_admin_password_temporary" {
@@ -314,7 +319,7 @@ variable "cert_issuer_name" {
 variable "cert_issuer_kind" {
   description = "Kind of cert-manager issuer: 'Issuer' (namespace-scoped) or 'ClusterIssuer' (cluster-wide)"
   type        = string
-  default     = "Issuer"
+  default     = "ClusterIssuer"
 }
 
 variable "letsencrypt_email" {

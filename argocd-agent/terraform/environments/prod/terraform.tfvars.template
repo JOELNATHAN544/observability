@@ -68,6 +68,7 @@ keycloak_url      = "<KEYCLOAK-URL>"  # Example: "https://keycloak.example.com"
 keycloak_user     = "admin"
 keycloak_password = "<KEYCLOAK-ADMIN-PASSWORD>"  # SECURITY: Use env var TF_VAR_keycloak_password
 keycloak_realm    = "argocd"
+keycloak_provider_client_id = "admin-cli"  # Client ID for Terraform provider auth (must have Direct Access Grants enabled)
 argocd_url        = "<ARGOCD-URL>"  # Example: "https://argocd.example.com"
 
 # PKCE mode (enables CLI login with --sso)

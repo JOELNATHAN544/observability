@@ -79,12 +79,29 @@ resource "helm_release" "nginx_ingress" {
 
   set {
     name  = "controller.ingressClass.create"
-    value = "true"
+    value = "false" # We create it explicitly below for better control
   }
 
   set {
     name  = "controller.ingressClass.setAsDefaultIngress"
     value = "false"
+  }
+
+  # Enable RBAC (should be enabled by default but explicit is better)
+  set {
+    name  = "rbac.create"
+    value = "true"
+  }
+
+  # ServiceAccount configuration
+  set {
+    name  = "serviceAccount.create"
+    value = "true"
+  }
+
+  set {
+    name  = "serviceAccount.name"
+    value = "${var.release_name}-nginx-ingress"
   }
 
   set {
@@ -100,6 +117,34 @@ resource "helm_release" "nginx_ingress" {
   # Wait for the LoadBalancer to be ready
   wait    = true
   timeout = 600
+}
+
+# Explicitly create IngressClass resource for better control and shareability
+# This ensures the IngressClass is properly managed and can be used by other resources
+resource "kubernetes_manifest" "ingress_class" {
+  count = var.install_nginx_ingress ? 1 : 0
+
+  manifest = {
+    apiVersion = "networking.k8s.io/v1"
+    kind       = "IngressClass"
+    metadata = {
+      name = var.ingress_class_name
+      labels = {
+        "app.kubernetes.io/name"       = "nginx-ingress"
+        "app.kubernetes.io/instance"   = var.release_name
+        "app.kubernetes.io/component"  = "controller"
+        "app.kubernetes.io/managed-by" = "terraform"
+      }
+      annotations = {
+        "ingressclass.kubernetes.io/is-default-class" = "false"
+      }
+    }
+    spec = {
+      controller = "nginx.org/ingress-controller"
+    }
+  }
+
+  depends_on = [helm_release.nginx_ingress]
 }
 
 # ClusterRole extension for cert-manager and Ingress status
@@ -134,24 +179,33 @@ resource "kubernetes_cluster_role_binding" "nginx_ingress_extension" {
 
   subject {
     kind      = "ServiceAccount"
-    name      = "nginx-monitoring-nginx-ingress" # Match the SA name used by helm
+    name      = "${var.release_name}-nginx-ingress"
     namespace = var.namespace
   }
 }
 
-# Explicit namespace cleanup on destroy
+# Explicit cleanup on destroy - removes IngressClass first, then namespace
 resource "null_resource" "namespace_cleanup" {
   count = var.install_nginx_ingress ? 1 : 0
 
   triggers = {
-    namespace = var.namespace
+    namespace     = var.namespace
+    ingress_class = var.ingress_class_name
   }
 
   provisioner "local-exec" {
     when       = destroy
-    command    = "kubectl delete namespace ${self.triggers.namespace} --ignore-not-found=true --timeout=60s || true"
+    command    = <<-EOT
+      # Delete IngressClass first
+      kubectl delete ingressclass ${self.triggers.ingress_class} --ignore-not-found=true --timeout=30s || true
+      # Then delete namespace
+      kubectl delete namespace ${self.triggers.namespace} --ignore-not-found=true --timeout=60s || true
+    EOT
     on_failure = continue
   }
 
-  depends_on = [helm_release.nginx_ingress]
+  depends_on = [
+    helm_release.nginx_ingress,
+    kubernetes_manifest.ingress_class
+  ]
 }

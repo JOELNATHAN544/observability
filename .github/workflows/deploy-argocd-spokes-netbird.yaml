@@ -1,0 +1,899 @@
+# Automated deployment of ArgoCD Agent to Spoke Clusters via Netbird
+# Optimized workflow with Netbird VPN mesh integration for local cluster access
+# - Ephemeral Netbird connection for GitHub Actions runner
+# - Terraform-managed spoke cluster deployment
+# - Agent connectivity verification
+# - Remote state management in Google Cloud Storage
+name: Deploy ArgoCD Spokes (Netbird)
+
+on:
+  # Manual trigger with plan/apply option
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: "Terraform Action"
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+        default: "plan"
+      adopt_existing_resources:
+        description: "Import existing ArgoCD agent resources into Terraform state"
+        required: false
+        type: boolean
+        default: false
+  # Auto-trigger on push to main branch (for testing)
+  push:
+    branches:
+      - 'main'
+    paths:
+      - "argocd-agent/terraform/**"
+      - ".github/workflows/deploy-argocd-spokes-netbird.yaml"
+
+# Required permissions for workflow operations
+permissions:
+  contents: read # Read repository content
+  id-token: write # Google Cloud Workload Identity
+
+# Global environment variables used across all jobs
+env:
+  TERRAFORM_VERSION: "1.9.0"
+  KUBECTL_VERSION: "1.28.0"
+  WORKING_DIR: "argocd-agent/terraform/environments/prod"
+  CLOUD_PROVIDER: "gke"
+  # Configurable deployment settings (can be overridden via GitHub variables)
+  ARGOCD_VERSION: ${{ vars.ARGOCD_VERSION || 'v0.5.3' }}
+  HUB_NAMESPACE: ${{ vars.HUB_NAMESPACE || 'argocd' }}
+  SPOKE_NAMESPACE: ${{ vars.SPOKE_NAMESPACE || 'argocd' }}
+
+jobs:
+  # Job 1: Generate and review Terraform infrastructure plan
+  # Includes Netbird connection for spoke cluster access
+  terraform-plan:
+    name: Terraform Plan
+    runs-on: ubuntu-latest
+    outputs:
+      plan_exitcode: ${{ steps.plan.outputs.exitcode }} # Pass plan result to dependent jobs
+
+    steps:
+      # Fetch repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # CRITICAL: Connect runner to Netbird network to access local spoke clusters
+      # Netbird cloud version setup
+      - name: Install Netbird CLI
+        run: |
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+      - name: Connect to Netbird
+        run: |
+          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }}
+
+      # Wait for Netbird peer sync
+      - name: Wait for Netbird peer sync
+        run: |
+          echo "⏳ Waiting for Netbird peer sync..."
+          MAX_WAIT=60
+          WAITED=0
+
+          while [ $WAITED -lt $MAX_WAIT ]; do
+            PEERS=$(netbird status | grep "Peers count" | awk '{print $3}')
+            echo "Current peers: $PEERS (waited ${WAITED}s)"
+            
+            # Check if we have connected peers (format: X/Y Connected)
+            if echo "$PEERS" | grep -q "/.*Connected" && ! echo "$PEERS" | grep -q "0/0"; then
+              echo "✅ Peers synced!"
+              netbird status
+              exit 0
+            fi
+            
+            sleep 5
+            WAITED=$((WAITED + 5))
+          done
+
+          echo "⚠ Peer sync timeout after ${MAX_WAIT}s, proceeding anyway..."
+          netbird status
+
+      # Verify Netbird connectivity
+      - name: Verify Netbird connection
+        run: |
+          echo "🔌 Verifying Netbird connection..."
+
+          # Install netbird CLI if available
+          if command -v netbird >/dev/null 2>&1; then
+            netbird status
+          else
+            echo "ℹ Netbird CLI not available in GitHub runner"
+            echo "Connection established via netbird-connect action"
+          fi
+
+          # Test connectivity to spoke clusters via Netbird
+          echo "Testing spoke cluster connectivity..."
+          echo "Reading Netbird IPs from secrets..."
+
+          SPOKE_1_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
+
+          echo "SPOKE_1_NETBIRD_IP: $SPOKE_1_IP"
+
+          SPOKE_IPS="$SPOKE_1_IP"
+
+          for ip in $SPOKE_IPS; do
+            if [ ! -z "$ip" ]; then
+              echo "Testing connectivity to $ip..."
+              if ping -c 3 -W 5 $ip; then
+                echo "✅ Reachable: $ip"
+              else
+                echo "⚠ Cannot reach: $ip (may not be configured)"
+              fi
+            fi
+          done
+
+      # Authenticate to GCP (needed for hub cluster context and state bucket access)
+      - name: Setup GCP credentials
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # Install gcloud CLI
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      # Install kubectl for cluster access
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+          # Install GKE auth plugin
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+          # Configure hub cluster context (needed for PKI operations)
+          gcloud container clusters get-credentials ${{ secrets.HUB_CLUSTER_NAME }} \
+            --region=${{ secrets.HUB_CLUSTER_LOCATION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+
+      # Generate kubeconfig for local spoke clusters using Netbird IPs
+      # Spoke clusters are already in Netbird with known stable IPs
+      - name: Generate kubeconfig for spoke clusters
+        run: |
+          echo "🔧 Generating kubeconfig for local spoke clusters..."
+
+          # Read spoke cluster list from secrets
+          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
+          if [ -z "$SPOKE_CLUSTERS" ]; then
+            echo "⚠ SPOKE_CLUSTERS secret not set, using default: spoke-1"
+            SPOKE_CLUSTERS="spoke-2"
+          fi
+
+          IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
+
+          for cluster in "${CLUSTERS[@]}"; do
+            cluster=$(echo "$cluster" | xargs)
+            echo "--- Processing cluster: $cluster ---"
+
+            # Get secrets based on cluster name
+            case "$cluster" in
+
+              spoke-2)
+                # TEST MAPPING: Mapping spoke-2 to use spoke-1 secrets (Netbird IP/Certs)
+                # This allows testing the multi-spoke logic using a single physical cluster.
+                # In a real environment, spoke-2 would have its own unique secrets.
+                # Helper: User wants to use spoke-2 context but with spoke-1 credentials
+                NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
+                CA_CERT_B64="${{ secrets.SPOKE_1_CA_CERT }}"
+                CLIENT_CERT_B64="${{ secrets.SPOKE_1_CLIENT_CERT }}"
+                CLIENT_KEY_B64="${{ secrets.SPOKE_1_CLIENT_KEY }}"
+                ;;
+              *)
+                echo "  ⚠ Unknown cluster: $cluster"
+                continue
+                ;;
+            esac
+
+            # Validation: Fail early if required secrets are missing
+            if [ -z "$NETBIRD_IP" ] || [ -z "$CA_CERT_B64" ] || [ -z "$CLIENT_CERT_B64" ] || [ -z "$CLIENT_KEY_B64" ]; then
+              echo "  ❌ ERROR: Missing secrets for $cluster. Ensure NETBIRD_IP, CA_CERT, CLIENT_CERT, and CLIENT_KEY are set."
+              exit 1
+            fi
+
+            # Clean IPs
+            NETBIRD_IP="${NETBIRD_IP%/32}"
+
+            # Create temporary files for certificates to ensure reliable kubeconfig embedding
+            CA_FILE=$(mktemp)
+            CERT_FILE=$(mktemp)
+            KEY_FILE=$(mktemp)
+            
+            echo "$CA_CERT_B64" | base64 -d > "$CA_FILE"
+            echo "$CLIENT_CERT_B64" | base64 -d > "$CERT_FILE"
+            echo "$CLIENT_KEY_B64" | base64 -d > "$KEY_FILE"
+
+            echo "  Configuring kubectl context..."
+            kubectl config set-cluster "$cluster" --server="https://$NETBIRD_IP:6443" --certificate-authority="$CA_FILE" --embed-certs=true
+            kubectl config set-credentials "$cluster-admin" --client-certificate="$CERT_FILE" --client-key="$KEY_FILE" --embed-certs=true
+            kubectl config set-context "$cluster" --cluster="$cluster" --user="$cluster-admin"
+
+            # Cleanup temp files
+            rm -f "$CA_FILE" "$CERT_FILE" "$KEY_FILE"
+
+            # Mandatory verification: Fail early if unauthorized
+            echo "  Verifying API access to $cluster..."
+            if ! kubectl cluster-info --context "$cluster" --insecure-skip-tls-verify=true > /dev/null 2>&1; then
+              echo "  ❌ ERROR: Authentication failed for $cluster (Unauthorized). Verify secrets are correct."
+              kubectl cluster-info --context "$cluster" --insecure-skip-tls-verify=true || true
+              exit 1
+            fi
+            echo "  ✅ Cluster $cluster is reachable and authorized"
+          done
+
+          echo "✅ Kubeconfig configured for all spoke clusters"
+
+      # Validate that all clusters in SPOKE_CLUSTERS have their contexts configured
+      - name: Validate spoke cluster contexts
+        run: |
+          echo "Validating that all spoke clusters have kubectl contexts configured..."
+          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
+          if [ -z "$SPOKE_CLUSTERS" ]; then
+            echo "⚠ SPOKE_CLUSTERS not configured, skipping validation"
+            exit 0
+          fi
+
+          MISSING_CONTEXTS=""
+          IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
+          for cluster in "${CLUSTERS[@]}"; do
+            cluster=$(echo "$cluster" | xargs)
+            if ! kubectl config get-contexts -o name | grep -q "^${cluster}$"; then
+              MISSING_CONTEXTS="$MISSING_CONTEXTS\n  - $cluster"
+            fi
+          done
+
+          if [ ! -z "$MISSING_CONTEXTS" ]; then
+            echo ""
+            echo "❌ ERROR: The following clusters are in SPOKE_CLUSTERS but their kubectl contexts were not created:"
+            echo -e "$MISSING_CONTEXTS"
+            echo ""
+            echo "This usually means the required secrets are missing. For each spoke cluster, you need:"
+            echo "  - SPOKE_N_NETBIRD_IP"
+            echo "  - SPOKE_N_CA_CERT"
+            echo "  - SPOKE_N_CLIENT_CERT"
+            echo "  - SPOKE_N_CLIENT_KEY"
+            echo ""
+            echo "Either:"
+            echo "  1. Add the missing secrets to GitHub for these clusters, OR"
+            echo "  2. Remove these clusters from the SPOKE_CLUSTERS secret"
+            exit 1
+          fi
+
+          echo "✅ All spoke clusters have valid contexts configured"
+        env:
+          SECRET_PREFIX: "" # Will be set dynamically in loop
+
+      # Get hub cluster context and dynamically resolve principal address
+      - name: Get Hub Cluster Info
+        id: cluster_info
+        run: |
+          CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.HUB_CLUSTER_LOCATION }}_${{ secrets.HUB_CLUSTER_NAME }}"
+          echo "context=$CONTEXT" >> $GITHUB_OUTPUT
+
+          # Dynamically resolve principal address from hub cluster
+          echo "Fetching principal address from hub cluster..."
+          PRINCIPAL_IP=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context "$CONTEXT" \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
+          if [ -z "$PRINCIPAL_IP" ]; then
+            PRINCIPAL_IP=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+              -n ${{ env.HUB_NAMESPACE }} \
+              --context "$CONTEXT" \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+          fi
+
+          if [ -z "$PRINCIPAL_IP" ]; then
+            echo "❌ ERROR: Could not resolve principal address from hub cluster."
+            echo "   Ensure the hub has been deployed and the principal service has an external IP."
+            kubectl get svc -n ${{ env.HUB_NAMESPACE }} --context "$CONTEXT" || true
+            exit 1
+          fi
+
+          # Determine port based on exposure method
+          EXPOSE_METHOD="${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
+
+          if [ "$EXPOSE_METHOD" = "ingress" ]; then
+            # Ingress uses standard HTTPS port
+            PRINCIPAL_PORT="443"
+            echo "✅ Using ingress exposure: port 443"
+          else
+            # LoadBalancer/NodePort - fetch actual service port
+            PRINCIPAL_PORT=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+              -n ${{ env.HUB_NAMESPACE }} \
+              --context "$CONTEXT" \
+              -o jsonpath='{.spec.ports[0].port}' 2>/dev/null)
+            
+            if [ -z "$PRINCIPAL_PORT" ]; then
+              echo "❌ ERROR: Could not fetch principal service port"
+              exit 1
+            fi
+            echo "✅ Using $EXPOSE_METHOD exposure: port $PRINCIPAL_PORT"
+          fi
+
+          echo "principal_address=$PRINCIPAL_IP" >> $GITHUB_OUTPUT
+          echo "principal_port=$PRINCIPAL_PORT" >> $GITHUB_OUTPUT
+          echo "✅ Principal address resolved: $PRINCIPAL_IP:$PRINCIPAL_PORT"
+
+      # Install Terraform CLI
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      # This group of steps configures the files needed for Terraform to run.
+      - name: Configure Terraform environment
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          # Clean up any previous backend configs
+          rm -f backend.tf backend-config.tf
+
+          echo "--- Configuring Terraform Backend ---"
+          bash ../../../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-spokes"
+
+          echo "--- Sanitizing secrets ---"
+          # Sanitize secrets to remove trailing whitespace/newlines
+          KEYCLOAK_URL=$(echo "${{ secrets.KEYCLOAK_URL }}" | tr -d '\n\r' | xargs)
+          KEYCLOAK_USER=$(echo "${{ secrets.KEYCLOAK_USER }}" | tr -d '\n\r' | xargs)
+          KEYCLOAK_PASSWORD=$(echo -n "${{ secrets.KEYCLOAK_PASSWORD }}" | tr -d '\n\r')  # Preserve internal spaces
+          ARGOCD_URL=$(echo "${{ secrets.ARGOCD_URL }}" | tr -d '\n\r' | xargs)
+          DEFAULT_ADMIN_PASSWORD=$(echo -n "${{ secrets.DEFAULT_ADMIN_PASSWORD }}" | tr -d '\n\r')  # Preserve internal spaces
+
+          echo "--- Creating terraform.tfvars file ---"
+          # Build workload_clusters map from SPOKE_CLUSTERS secret
+          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
+          if [ -z "$SPOKE_CLUSTERS" ]; then
+            SPOKE_CLUSTERS="spoke-2"
+          fi
+
+          # Convert comma-separated list to Terraform map format
+          CLUSTERS_MAP="{"
+          IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
+          for i in "${!CLUSTERS[@]}"; do
+            cluster=$(echo "${CLUSTERS[$i]}" | xargs)
+            # Derive agent namespace name from cluster name.
+            # Example: spoke-2 -> agent-2, spoke2 -> agent-2
+            agent="$cluster"
+            agent=$(echo "$agent" | sed -E 's/^spoke-?/agent-/')
+            agent=$(echo "$agent" | sed -E 's/agent-+$/agent/')
+            if [ $i -gt 0 ]; then
+              CLUSTERS_MAP="$CLUSTERS_MAP, "
+            fi
+            CLUSTERS_MAP="$CLUSTERS_MAP\"$agent\" = \"$cluster\""
+          done
+          CLUSTERS_MAP="$CLUSTERS_MAP}"
+
+          cat > terraform.tfvars <<EOF
+          # Deployment control
+          deploy_hub                   = false
+          deploy_spokes                = true
+
+          # Cluster configuration
+          hub_cluster_context          = "${{ steps.cluster_info.outputs.context }}"
+          workload_clusters            = $CLUSTERS_MAP
+
+          # ArgoCD configuration
+          argocd_version               = "${{ env.ARGOCD_VERSION }}"
+          hub_namespace                = "${{ env.HUB_NAMESPACE }}"
+          spoke_namespace              = "${{ env.SPOKE_NAMESPACE }}"
+
+          # Principal connection (dynamically resolved from hub cluster)
+          principal_address            = "${{ steps.cluster_info.outputs.principal_address }}"
+          principal_port               = ${{ steps.cluster_info.outputs.principal_port }}
+
+          # Keycloak integration (optional)
+          enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
+          keycloak_url                 = "$KEYCLOAK_URL"
+          keycloak_user                = "$KEYCLOAK_USER"
+          keycloak_password            = "$KEYCLOAK_PASSWORD"
+          keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
+          keycloak_provider_client_id  = "${{ vars.KEYCLOAK_PROVIDER_CLIENT_ID || 'admin-cli' }}"
+          argocd_url                   = "$ARGOCD_URL"
+          create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
+          default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
+          default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
+          default_admin_password       = "$DEFAULT_ADMIN_PASSWORD"
+          default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
+
+          # AppProject configuration
+          enable_appproject_sync       = true
+          appproject_default_source_namespaces = ["*"]
+          appproject_default_dest_server       = "*"
+          appproject_default_dest_namespaces   = ["*"]
+          EOF
+
+          echo "Generated terraform.tfvars:"
+          cat terraform.tfvars
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+
+      # Initialize Terraform
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      # Validate Terraform syntax
+      - name: Terraform Validate
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform validate
+
+      # Execute Terraform plan
+      - name: Terraform Plan
+        id: plan
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          set +e
+          terraform plan -out=tfplan -detailed-exitcode
+          EXIT_CODE=$?
+          set -e
+
+          echo "exitcode=$EXIT_CODE" >> $GITHUB_OUTPUT
+
+          if [ $EXIT_CODE -eq 1 ]; then
+            echo "❌ Terraform plan failed!"
+            exit 1
+          fi
+
+          terraform show tfplan > plan.txt
+          exit 0
+
+      # Save plan artifacts
+      - name: Upload plan
+        uses: actions/upload-artifact@v6
+        with:
+          name: tfplan-argocd-spokes-netbird
+          path: |
+            ${{ env.WORKING_DIR }}/tfplan
+            ${{ env.WORKING_DIR }}/plan.txt
+          retention-days: 5
+
+  # Job 2: Apply Terraform plan and verify deployment
+  terraform-apply-and-verify:
+    name: Terraform Apply & Verify
+    runs-on: ubuntu-latest
+    needs: [terraform-plan]
+    if: |
+      (github.event_name == 'push') ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.terraform_action == 'apply')
+    environment:
+      name: production
+
+    steps:
+      # Fetch repository code
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # CRITICAL: Connect runner to Netbird network
+      # Netbird cloud version setup
+      - name: Install Netbird CLI
+        run: |
+          curl -fsSL https://pkgs.netbird.io/install.sh | sh
+
+      - name: Connect to Netbird
+        run: |
+          netbird up --setup-key ${{ secrets.NETBIRD_SETUP_KEY_RUNNERS }}
+      # Wait for Netbird peer sync
+      - name: Wait for Netbird peer sync
+        run: |
+          echo "⏳ Waiting for Netbird peer sync..."
+          MAX_WAIT=60
+          WAITED=0
+
+          while [ $WAITED -lt $MAX_WAIT ]; do
+            PEERS=$(netbird status | grep "Peers count" | awk '{print $3}')
+            echo "Current peers: $PEERS (waited ${WAITED}s)"
+            
+            # Check if we have connected peers (format: X/Y Connected)
+            if echo "$PEERS" | grep -q "/.*Connected" && ! echo "$PEERS" | grep -q "0/0"; then
+              echo "✅ Peers synced!"
+              netbird status
+              exit 0
+            fi
+            
+            sleep 5
+            WAITED=$((WAITED + 5))
+          done
+
+          echo "⚠ Peer sync timeout after ${MAX_WAIT}s, proceeding anyway..."
+          netbird status
+
+      # Install Terraform CLI
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: ${{ env.TERRAFORM_VERSION }}
+
+      # Authenticate to GCP
+      - name: Setup GCP credentials
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      # Install gcloud CLI
+      - name: Setup gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      # Install kubectl
+      - name: Setup kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          sudo mv kubectl /usr/local/bin/
+
+          # Install GKE auth plugin
+          echo "deb [signed-by=/usr/share/keyrings/cloud.google.gpg] https://packages.cloud.google.com/apt cloud-sdk main" | sudo tee -a /etc/apt/sources.list.d/google-cloud-sdk.list
+          curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key --keyring /usr/share/keyrings/cloud.google.gpg add -
+          sudo apt-get update && sudo apt-get install -y google-cloud-sdk-gke-gcloud-auth-plugin
+
+      # Install argocd-agentctl for certificate generation
+      - name: Install argocd-agentctl
+        run: |
+          curl -L -f https://github.com/argoproj-labs/argocd-agent/releases/download/v0.5.3/argocd-agentctl_linux-amd64 -o /tmp/argocd-agentctl
+          file /tmp/argocd-agentctl
+          chmod +x /tmp/argocd-agentctl
+          sudo mv /tmp/argocd-agentctl /usr/local/bin/argocd-agentctl
+          /usr/local/bin/argocd-agentctl version
+
+          # Configure hub cluster
+          gcloud container clusters get-credentials ${{ secrets.HUB_CLUSTER_NAME }} \
+            --region=${{ secrets.HUB_CLUSTER_LOCATION }} \
+            --project=${{ secrets.GCP_PROJECT_ID }}
+
+      # Generate kubeconfig for spoke clusters (same as plan job)
+      - name: Generate kubeconfig for spoke clusters
+        run: |
+          echo "🔧 Generating kubeconfig for local spoke clusters..."
+
+          # Read spoke cluster list from secrets
+          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
+          if [ -z "$SPOKE_CLUSTERS" ]; then
+            echo "⚠ SPOKE_CLUSTERS secret not set, using default: spoke-2"
+            SPOKE_CLUSTERS="spoke-2"
+          fi
+
+          IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
+
+          for cluster in "${CLUSTERS[@]}"; do
+            cluster=$(echo "$cluster" | xargs)
+            echo "--- Processing cluster: $cluster ---"
+
+            # Get secrets based on cluster name
+            case "$cluster" in
+
+              spoke-2)
+                # TEST MAPPING: Mapping spoke-2 to use spoke-1 secrets (Netbird IP/Certs)
+                # This allows testing the multi-spoke logic using a single physical cluster.
+                # In a real environment, spoke-2 would have its own unique secrets.
+                # Helper: User wants to use spoke-2 context but with spoke-1 credentials
+                NETBIRD_IP="${{ secrets.SPOKE_1_NETBIRD_IP }}"
+                CA_CERT_B64="${{ secrets.SPOKE_1_CA_CERT }}"
+                CLIENT_CERT_B64="${{ secrets.SPOKE_1_CLIENT_CERT }}"
+                CLIENT_KEY_B64="${{ secrets.SPOKE_1_CLIENT_KEY }}"
+                ;;
+              *)
+                echo "  ⚠ Unknown cluster: $cluster"
+                continue
+                ;;
+            esac
+
+            # Validation: Fail early if required secrets are missing
+            if [ -z "$NETBIRD_IP" ] || [ -z "$CA_CERT_B64" ] || [ -z "$CLIENT_CERT_B64" ] || [ -z "$CLIENT_KEY_B64" ]; then
+              echo "  ❌ ERROR: Missing secrets for $cluster. Ensure NETBIRD_IP, CA_CERT, CLIENT_CERT, and CLIENT_KEY are set."
+              exit 1
+            fi
+
+            # Clean IPs
+            NETBIRD_IP="${NETBIRD_IP%/32}"
+
+            # Create temporary files for certificates to ensure reliable kubeconfig embedding
+            CA_FILE=$(mktemp)
+            CERT_FILE=$(mktemp)
+            KEY_FILE=$(mktemp)
+            
+            echo "$CA_CERT_B64" | base64 -d > "$CA_FILE"
+            echo "$CLIENT_CERT_B64" | base64 -d > "$CERT_FILE"
+            echo "$CLIENT_KEY_B64" | base64 -d > "$KEY_FILE"
+
+            echo "  Configuring kubectl context..."
+            kubectl config set-cluster "$cluster" --server="https://$NETBIRD_IP:6443" --certificate-authority="$CA_FILE" --embed-certs=true
+            kubectl config set-credentials "$cluster-admin" --client-certificate="$CERT_FILE" --client-key="$KEY_FILE" --embed-certs=true
+            kubectl config set-context "$cluster" --cluster="$cluster" --user="$cluster-admin"
+
+            # Cleanup temp files
+            rm -f "$CA_FILE" "$CERT_FILE" "$KEY_FILE"
+
+            # Mandatory verification: Fail early if unauthorized
+            echo "  Verifying API access to $cluster..."
+            if ! kubectl cluster-info --context "$cluster" --insecure-skip-tls-verify=true > /dev/null 2>&1; then
+              echo "  ❌ ERROR: Authentication failed for $cluster (Unauthorized). Verify secrets are correct."
+              kubectl cluster-info --context "$cluster" --insecure-skip-tls-verify=true || true
+              exit 1
+            fi
+            echo "  ✅ Cluster $cluster is reachable and authorized"
+          done
+
+          echo "✅ Kubeconfig configured for all spoke clusters"
+          kubectl config get-contexts
+
+      # Get hub context and dynamically resolve principal address
+      - name: Get Hub Cluster Info
+        id: cluster_info
+        run: |
+          CONTEXT="gke_${{ secrets.GCP_PROJECT_ID }}_${{ secrets.HUB_CLUSTER_LOCATION }}_${{ secrets.HUB_CLUSTER_NAME }}"
+          echo "context=$CONTEXT" >> $GITHUB_OUTPUT
+
+          # Dynamically resolve principal address from hub cluster
+          echo "Fetching principal address from hub cluster..."
+          PRINCIPAL_IP=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+            -n ${{ env.HUB_NAMESPACE }} \
+            --context "$CONTEXT" \
+            -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
+          if [ -z "$PRINCIPAL_IP" ]; then
+            PRINCIPAL_IP=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+              -n ${{ env.HUB_NAMESPACE }} \
+              --context "$CONTEXT" \
+              -o jsonpath='{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)
+          fi
+
+          if [ -z "$PRINCIPAL_IP" ]; then
+            echo "❌ ERROR: Could not resolve principal address from hub cluster."
+            echo "   Ensure the hub has been deployed and the principal service has an external IP."
+            kubectl get svc -n ${{ env.HUB_NAMESPACE }} --context "$CONTEXT" || true
+            exit 1
+          fi
+
+          # Determine port based on exposure method
+          EXPOSE_METHOD="${{ vars.PRINCIPAL_EXPOSE_METHOD || 'loadbalancer' }}"
+
+          if [ "$EXPOSE_METHOD" = "ingress" ]; then
+            # Ingress uses standard HTTPS port
+            PRINCIPAL_PORT="443"
+            echo "✅ Using ingress exposure: port 443"
+          else
+            # LoadBalancer/NodePort - fetch actual service port
+            PRINCIPAL_PORT=$(kubectl get svc ${{ env.PRINCIPAL_SERVICE_NAME || 'argocd-agent-principal' }} \
+              -n ${{ env.HUB_NAMESPACE }} \
+              --context "$CONTEXT" \
+              -o jsonpath='{.spec.ports[0].port}' 2>/dev/null)
+            
+            if [ -z "$PRINCIPAL_PORT" ]; then
+              echo "❌ ERROR: Could not fetch principal service port"
+              exit 1
+            fi
+            echo "✅ Using $EXPOSE_METHOD exposure: port $PRINCIPAL_PORT"
+          fi
+
+          echo "principal_address=$PRINCIPAL_IP" >> $GITHUB_OUTPUT
+          echo "principal_port=$PRINCIPAL_PORT" >> $GITHUB_OUTPUT
+          echo "✅ Principal address resolved: $PRINCIPAL_IP:$PRINCIPAL_PORT"
+
+      # This group of steps configures the files needed for Terraform to run.
+      - name: Configure Terraform environment
+        working-directory: ${{ env.WORKING_DIR }}
+        run: |
+          # Clean up any previous backend configs
+          rm -f backend.tf backend-config.tf
+
+          echo "--- Configuring Terraform Backend ---"
+          bash ../../../../.github/scripts/configure-backend.sh "${{ env.CLOUD_PROVIDER }}" "argocd-spokes"
+
+          echo "--- Sanitizing secrets ---"
+          # Sanitize secrets to remove trailing whitespace/newlines
+          KEYCLOAK_URL=$(echo "${{ secrets.KEYCLOAK_URL }}" | tr -d '\n\r' | xargs)
+          KEYCLOAK_USER=$(echo "${{ secrets.KEYCLOAK_USER }}" | tr -d '\n\r' | xargs)
+          KEYCLOAK_PASSWORD=$(echo -n "${{ secrets.KEYCLOAK_PASSWORD }}" | tr -d '\n\r')  # Preserve internal spaces
+          ARGOCD_URL=$(echo "${{ secrets.ARGOCD_URL }}" | tr -d '\n\r' | xargs)
+          DEFAULT_ADMIN_PASSWORD=$(echo -n "${{ secrets.DEFAULT_ADMIN_PASSWORD }}" | tr -d '\n\r')  # Preserve internal spaces
+
+          echo "--- Creating terraform.tfvars file ---"
+          # Build workload_clusters map from SPOKE_CLUSTERS secret
+          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
+          if [ -z "$SPOKE_CLUSTERS" ]; then
+            SPOKE_CLUSTERS="spoke-2"
+          fi
+
+          # Convert comma-separated list to Terraform map format
+          CLUSTERS_MAP="{"
+          IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
+          for i in "${!CLUSTERS[@]}"; do
+            cluster=$(echo "${CLUSTERS[$i]}" | xargs)
+            # Derive agent namespace name from cluster name.
+            # Example: spoke-2 -> agent-2, spoke2 -> agent-2
+            agent="$cluster"
+            agent=$(echo "$agent" | sed -E 's/^spoke-?/agent-/')
+            agent=$(echo "$agent" | sed -E 's/agent-+$/agent/')
+            if [ $i -gt 0 ]; then
+              CLUSTERS_MAP="$CLUSTERS_MAP, "
+            fi
+            CLUSTERS_MAP="$CLUSTERS_MAP\"$agent\" = \"$cluster\""
+          done
+          CLUSTERS_MAP="$CLUSTERS_MAP}"
+
+          cat > terraform.tfvars <<EOF
+          # Deployment control
+          deploy_hub                   = false
+          deploy_spokes                = true
+
+          # Cluster configuration
+          hub_cluster_context          = "${{ steps.cluster_info.outputs.context }}"
+          workload_clusters            = $CLUSTERS_MAP
+
+          # ArgoCD configuration
+          argocd_version               = "${{ env.ARGOCD_VERSION }}"
+          hub_namespace                = "${{ env.HUB_NAMESPACE }}"
+          spoke_namespace              = "${{ env.SPOKE_NAMESPACE }}"
+
+          # Principal connection (dynamically resolved from hub cluster)
+          principal_address            = "${{ steps.cluster_info.outputs.principal_address }}"
+          principal_port               = ${{ steps.cluster_info.outputs.principal_port }}
+
+          # Keycloak integration (optional)
+          enable_keycloak              = ${{ vars.ENABLE_KEYCLOAK || 'false' }}
+          keycloak_url                 = "$KEYCLOAK_URL"
+          keycloak_user                = "$KEYCLOAK_USER"
+          keycloak_password            = "$KEYCLOAK_PASSWORD"
+          keycloak_realm               = "${{ vars.KEYCLOAK_REALM || 'argocd' }}"
+          keycloak_provider_client_id  = "${{ vars.KEYCLOAK_PROVIDER_CLIENT_ID || 'admin-cli' }}"
+          argocd_url                   = "$ARGOCD_URL"
+          create_default_admin_user    = ${{ vars.CREATE_DEFAULT_ADMIN_USER || 'true' }}
+          default_admin_username       = "${{ vars.DEFAULT_ADMIN_USERNAME || 'argocd-admin' }}"
+          default_admin_email          = "${{ vars.DEFAULT_ADMIN_EMAIL || 'admin@argocd.local' }}"
+          default_admin_password       = "$DEFAULT_ADMIN_PASSWORD"
+          default_admin_password_temporary = ${{ vars.DEFAULT_ADMIN_PASSWORD_TEMPORARY || 'true' }}
+
+          # AppProject configuration
+          enable_appproject_sync       = true
+          appproject_default_source_namespaces = ["*"]
+          appproject_default_dest_server       = "*"
+          appproject_default_dest_namespaces   = ["*"]
+          EOF
+
+          echo "Generated terraform.tfvars:"
+          cat terraform.tfvars
+        env:
+          TF_STATE_BUCKET: ${{ secrets.TF_STATE_BUCKET }}
+
+      # Initialize Terraform
+      - name: Terraform Init
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform init
+
+      # Download the plan artifact
+      - name: Download plan
+        uses: actions/download-artifact@v7
+        with:
+          name: tfplan-argocd-spokes-netbird
+          path: ${{ env.WORKING_DIR }}
+
+      # Execute the plan to deploy spoke clusters
+      - name: Terraform Apply
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform apply -auto-approve tfplan
+
+      # Extract Terraform outputs
+      - name: Output deployment info
+        working-directory: ${{ env.WORKING_DIR }}
+        run: terraform output -json > terraform-outputs.json
+
+      # Save outputs as artifact
+      - name: Upload outputs
+        uses: actions/upload-artifact@v6
+        with:
+          name: terraform-outputs-argocd-spokes-netbird
+          path: ${{ env.WORKING_DIR }}/terraform-outputs.json
+          retention-days: 30
+
+      # Verify successful deployment
+      - name: Verify ArgoCD Spoke deployment
+        run: |
+          echo "🔍 Verifying ArgoCD Agent spoke deployment..."
+
+          SPOKE_CLUSTERS="${{ secrets.SPOKE_CLUSTERS }}"
+          if [ -z "$SPOKE_CLUSTERS" ]; then
+            SPOKE_CLUSTERS="spoke-2"
+          fi
+
+          IFS=',' read -ra CLUSTERS <<< "$SPOKE_CLUSTERS"
+
+          SUCCESS_COUNT=0
+          FAIL_COUNT=0
+
+          for cluster in "${CLUSTERS[@]}"; do
+            cluster=$(echo "$cluster" | xargs)
+            echo ""
+            echo "═══════════════════════════════════════════════════════════"
+            echo "Verifying $cluster..."
+            echo "═══════════════════════════════════════════════════════════"
+
+            # Test 1: Namespace exists
+            echo "1. Checking namespace..."
+            if kubectl get namespace ${{ env.SPOKE_NAMESPACE }} --context $cluster 2>/dev/null; then
+              echo "   ✅ Namespace exists"
+            else
+              echo "   ❌ Namespace not found"
+              FAIL_COUNT=$((FAIL_COUNT + 1))
+              continue
+            fi
+
+            # Test 2: ArgoCD components ready
+            echo "2. Checking ArgoCD pods..."
+            if kubectl get pods -n ${{ env.SPOKE_NAMESPACE }} --context $cluster 2>/dev/null; then
+              kubectl wait --for=condition=ready pod \
+                -l app.kubernetes.io/part-of=argocd \
+                -n ${{ env.SPOKE_NAMESPACE }} \
+                --context $cluster \
+                --timeout=300s && echo "   ✅ All pods ready" || echo "   ⚠ Some pods not ready"
+            else
+              echo "   ❌ Cannot get pods"
+              FAIL_COUNT=$((FAIL_COUNT + 1))
+              continue
+            fi
+
+            # Test 3: Agent connected to principal
+            echo "3. Checking agent connection..."
+            sleep 10  # Allow time for agent connection
+
+            AGENT_LOGS=$(kubectl logs -l app.kubernetes.io/name=argocd-agent-agent \
+              -n ${{ env.SPOKE_NAMESPACE }} \
+              --context $cluster \
+              --tail=100 2>/dev/null || echo "")
+
+            if echo "$AGENT_LOGS" | grep -qi "connected to principal\|authentication successful\|registered with principal"; then
+              echo "   ✅ Agent connected to principal"
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+            else
+              echo "   ❌ Agent connection not confirmed"
+              echo "   Recent logs:"
+              echo "$AGENT_LOGS" | tail -20
+              FAIL_COUNT=$((FAIL_COUNT + 1))
+            fi
+
+            # Test 4: Agent certificates exist
+            echo "4. Checking certificates..."
+            if kubectl get secret argocd-agent-client-tls -n ${{ env.SPOKE_NAMESPACE }} --context $cluster 2>/dev/null; then
+              echo "   ✅ Client certificate exists"
+            else
+              echo "   ⚠ Client certificate not found"
+            fi
+
+            if kubectl get secret argocd-agent-ca -n ${{ env.SPOKE_NAMESPACE }} --context $cluster 2>/dev/null; then
+              echo "   ✅ CA certificate exists"
+            else
+              echo "   ⚠ CA certificate not found"
+            fi
+          done
+
+          echo ""
+          echo "══════════════════════════════════════════════════════════════"
+          echo "📊 Verification Summary"
+          echo "══════════════════════════════════════════════════════════════"
+          echo "✅ Successfully connected: $SUCCESS_COUNT"
+          echo "❌ Failed connections: $FAIL_COUNT"
+          echo ""
+
+          if [ $FAIL_COUNT -gt 0 ]; then
+            echo "⚠ Some spoke clusters had connection issues"
+            echo "   Check agent logs for troubleshooting"
+            exit 1
+          else
+            echo "✅ All spoke clusters deployed and connected successfully!"
+          fi
+
+          echo ""
+          echo "📝 Next Steps:"
+          echo "   1. Access ArgoCD UI at: ${{ secrets.ARGOCD_URL }}"
+          echo "   2. Verify spoke clusters appear in Settings → Clusters"
+          echo "   3. Deploy test application to validate agent functionality"
+          echo "══════════════════════════════════════════════════════════════"

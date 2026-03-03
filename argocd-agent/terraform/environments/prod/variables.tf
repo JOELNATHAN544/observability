@@ -161,6 +161,19 @@ variable "keycloak_client_id" {
   default     = "argocd"
 }
 
+variable "keycloak_provider_client_id" {
+  description = "Keycloak client ID used by the Terraform provider to authenticate (must have Direct Access Grants enabled)"
+  type        = string
+  default     = "admin-cli"
+}
+
+variable "keycloak_provider_client_secret" {
+  description = "Keycloak client secret for service account authentication (leave empty to use username/password). For production, create a confidential client with service accounts enabled."
+  type        = string
+  sensitive   = true
+  default     = ""
+}
+
 variable "keycloak_enable_pkce" {
   description = "Enable PKCE authentication method (true) instead of Client Authentication (false). PKCE enables CLI login with --sso."
   type        = bool

@@ -3,18 +3,27 @@
 # =============================================================================
 
 # 1.1 Create Namespace
-resource "kubernetes_namespace" "hub_argocd" {
+resource "null_resource" "hub_argocd_namespace" {
+  count = var.deploy_hub ? 1 : 0
 
-  provider = kubernetes
-
-  metadata {
-    name = var.hub_namespace
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -e
+      if ! kubectl get namespace ${var.hub_namespace} --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+        echo "Creating namespace ${var.hub_namespace}..."
+        kubectl create namespace ${var.hub_namespace} --context ${var.hub_cluster_context}
+      else
+        echo "Namespace ${var.hub_namespace} already exists."
+      fi
+    EOT
   }
 }
 
 # 1.2 Install Base Argo CD (Step 1 - WITHOUT Principal)
 # Installs core ArgoCD components on hub cluster: server, repo-server, application-controller
 resource "null_resource" "hub_argocd_base_install" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -37,6 +46,8 @@ resource "null_resource" "hub_argocd_base_install" {
         # Use kubectl apply with -k flag for kustomize directory
         if kubectl apply -n ${var.hub_namespace} \
           --context ${var.hub_cluster_context} \
+          --server-side \
+          --force-conflicts \
           -k ${local.argocd_base_install_url} 2>&1 | tee -a "$LOG_FILE"; then
           echo "✓ Principal-specific Argo CD manifests applied successfully" | tee -a "$LOG_FILE"
           echo "  Components: server, dex, redis, repo-server, applicationset-controller" | tee -a "$LOG_FILE"
@@ -93,7 +104,7 @@ resource "null_resource" "hub_argocd_base_install" {
   }
 
   depends_on = [
-    kubernetes_namespace.hub_argocd
+    null_resource.hub_argocd_namespace
   ]
 
   triggers = {
@@ -108,6 +119,7 @@ resource "null_resource" "hub_argocd_base_install" {
 # Allows applications to be created in any namespace (required for agent architecture)
 # Also configures extended timeouts for resource-proxy communication
 resource "null_resource" "hub_argocd_apps_any_namespace" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -155,6 +167,7 @@ resource "null_resource" "hub_argocd_apps_any_namespace" {
 # Customizes health assessment to handle Ingress resources without LoadBalancer
 # Prevents applications from stuck in "Progressing" state due to missing ingress IPs
 resource "null_resource" "hub_argocd_resource_health_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -222,18 +235,90 @@ resource "null_resource" "hub_argocd_server_insecure" {
 # The application-controller does NOT run on the hub (principal-only cluster)
 # Reconciliation timeouts are configured on spoke clusters where application-controller runs
 
+# 1.4.1 Create cert-manager Certificate for ArgoCD UI (only if it doesn't exist)
+resource "null_resource" "argocd_server_certificate" {
+  count = var.deploy_hub && var.ui_expose_method == "ingress" && var.argocd_host != "" ? 1 : 0
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -e
+      # Check if Certificate already exists
+      if kubectl get certificate argocd-server-tls -n ${var.hub_namespace} --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+        echo "Certificate argocd-server-tls already exists, skipping creation"
+      else
+        echo "Creating Certificate argocd-server-tls..."
+        kubectl apply -f - <<EOF
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: argocd-server-tls
+  namespace: ${var.hub_namespace}
+spec:
+  secretName: argocd-server-tls
+  issuerRef:
+    name: ${var.cert_issuer_name}
+    kind: ${var.cert_issuer_kind}
+  commonName: ${var.argocd_host}
+  dnsNames:
+    - ${var.argocd_host}
+EOF
+        echo "✓ Certificate argocd-server-tls created"
+      fi
+    EOT
+  }
+
+  depends_on = [
+    null_resource.hub_argocd_server_insecure
+  ]
+}
+
+# 1.4.2 Wait for certificate to be issued
+resource "null_resource" "argocd_server_certificate_wait" {
+  count = var.deploy_hub && var.ui_expose_method == "ingress" && var.argocd_host != "" ? 1 : 0
+
+  provisioner "local-exec" {
+    interpreter = ["/bin/bash", "-c"]
+    command     = <<-EOT
+      set -o pipefail
+      echo "Waiting for argocd-server-tls certificate to be ready (max 180s)..."
+
+      if kubectl wait certificate argocd-server-tls -n ${var.hub_namespace} \
+        --context ${var.hub_cluster_context} \
+        --for=condition=Ready \
+        --timeout=180s; then
+        echo "✓ Certificate argocd-server-tls is ready"
+      else
+        echo "⚠ Certificate argocd-server-tls not Ready after 180s; continuing without blocking deployment"
+        echo "--- Certificate describe ---"
+        kubectl describe certificate argocd-server-tls -n ${var.hub_namespace} \
+          --context ${var.hub_cluster_context} || true
+        echo "--- Recent cert-manager related events ---"
+        kubectl get events -n ${var.hub_namespace} \
+          --context ${var.hub_cluster_context} \
+          --sort-by=.metadata.creationTimestamp | tail -n 50 || true
+      fi
+    EOT
+  }
+
+  depends_on = [
+    null_resource.argocd_server_certificate
+  ]
+}
+
 # 1.4 Expose ArgoCD UI via Ingress
 resource "kubernetes_ingress_v1" "argocd_ui" {
-  count    = var.deploy_hub && var.ui_expose_method == "ingress" ? 1 : 0
+  count    = var.deploy_hub && var.ui_expose_method == "ingress" && var.argocd_host != "" ? 1 : 0
   provider = kubernetes
 
   metadata {
     name      = "argocd-server"
     namespace = var.hub_namespace
     annotations = {
-      "cert-manager.io/${var.cert_issuer_kind == "ClusterIssuer" ? "cluster-issuer" : "issuer"}" = var.cert_issuer_name
-      "nginx.ingress.kubernetes.io/force-ssl-redirect"                                           = "true"
-      "nginx.ingress.kubernetes.io/backend-protocol"                                             = "HTTP"
+      "nginx.ingress.kubernetes.io/force-ssl-redirect" = "true"
+      "nginx.ingress.kubernetes.io/backend-protocol"   = "HTTP"
+      "nginx.org/ssl-redirect"                         = "true"
+      "acme.cert-manager.io/http01-edit-in-place"      = "true"
     }
   }
 
@@ -265,13 +350,14 @@ resource "kubernetes_ingress_v1" "argocd_ui" {
   }
 
   depends_on = [
-    null_resource.hub_argocd_server_insecure
+    null_resource.hub_argocd_server_insecure,
+    null_resource.argocd_server_certificate_wait
   ]
 }
 
 # 1.4 Expose ArgoCD UI via LoadBalancer
 resource "null_resource" "argocd_ui_loadbalancer" {
-  count = var.ui_expose_method == "loadbalancer" ? 1 : 0
+  count = var.deploy_hub && var.ui_expose_method == "loadbalancer" ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -297,6 +383,7 @@ resource "null_resource" "argocd_ui_loadbalancer" {
 # 2.1 Initialize PKI (after ArgoCD apps-in-any-namespace is configured)
 # Creates the root CA certificate authority for agent mTLS authentication
 resource "null_resource" "hub_pki_initialization" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -311,7 +398,11 @@ resource "null_resource" "hub_pki_initialization" {
       echo "Principal context: ${var.hub_cluster_context}" | tee -a "$LOG_FILE"
       echo "Principal namespace: ${var.hub_namespace}" | tee -a "$LOG_FILE"
       
-      if ! ${var.argocd_agentctl_path} pki init \
+      # Idempotency: skip if CA secret already exists
+      if kubectl get secret argocd-agent-ca -n ${var.hub_namespace} \
+        --context ${var.hub_cluster_context} >/dev/null 2>&1; then
+        echo "✓ CA secret already exists, skipping PKI initialization" | tee -a "$LOG_FILE"
+      elif ! ${var.argocd_agentctl_path} pki init \
         --principal-context ${var.hub_cluster_context} \
         --principal-namespace ${var.hub_namespace} 2>&1 | tee -a "$LOG_FILE"; then
         echo "✗ ERROR: PKI initialization failed. Check logs: $LOG_FILE" | tee -a "$LOG_FILE"
@@ -334,6 +425,7 @@ resource "null_resource" "hub_pki_initialization" {
 # 2.1.1 Issue Principal Server Certificate (BEFORE deployment so pod can start)
 # Creates initial server certificate for Principal service (will be updated with LoadBalancer IP later)
 resource "null_resource" "hub_pki_principal_server_cert_initial" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -367,6 +459,7 @@ resource "null_resource" "hub_pki_principal_server_cert_initial" {
 
 # Deploys ArgoCD Agent Principal component (agent management server)
 resource "null_resource" "hub_principal_installation" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -445,6 +538,7 @@ resource "null_resource" "hub_principal_installation" {
 
 # Patches ArgoCD Redis NetworkPolicy to allow Principal component access
 resource "null_resource" "hub_redis_network_policy_patch" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -476,7 +570,7 @@ resource "null_resource" "hub_redis_network_policy_patch" {
 
 # Exposes Principal service via LoadBalancer for external agent connectivity
 resource "null_resource" "hub_principal_loadbalancer_service" {
-  count = var.principal_expose_method == "loadbalancer" ? 1 : 0
+  count = var.deploy_hub && var.principal_expose_method == "loadbalancer" ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -505,7 +599,7 @@ resource "null_resource" "hub_principal_loadbalancer_service" {
 
 # Exposes Principal service via NodePort for local/development clusters
 resource "null_resource" "hub_principal_nodeport_service" {
-  count = var.principal_expose_method == "nodeport" ? 1 : 0
+  count = var.deploy_hub && var.principal_expose_method == "nodeport" ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -654,6 +748,7 @@ resource "kubernetes_ingress_v1" "hub_principal_ingress" {
 
 # Updates Principal server certificate with LoadBalancer IP after service is exposed
 resource "null_resource" "hub_pki_principal_server_cert_updated" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -692,18 +787,18 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
         exit 1
       fi
       
-      echo "Waiting for Principal pods to be ready..." | tee -a "$LOG_FILE"
-      if ! kubectl wait --for=condition=ready pod \
-        -l app.kubernetes.io/name=${var.principal_service_name} \
+      echo "Waiting for Principal deployment rollout..." | tee -a "$LOG_FILE"
+      if ! kubectl rollout status deployment/${var.principal_service_name} \
         -n ${var.hub_namespace} \
         --context ${var.hub_cluster_context} \
         --timeout=${var.kubectl_timeout} 2>&1 | tee -a "$LOG_FILE"; then
-        echo "✗ ERROR: Principal pods failed to become ready after restart" | tee -a "$LOG_FILE"
+        echo "✗ ERROR: Principal deployment failed to complete rollout" | tee -a "$LOG_FILE"
+        kubectl describe deployment/${var.principal_service_name} -n ${var.hub_namespace} --context ${var.hub_cluster_context} | tee -a "$LOG_FILE"
         kubectl describe pods -l app.kubernetes.io/name=${var.principal_service_name} -n ${var.hub_namespace} --context ${var.hub_cluster_context} | tee -a "$LOG_FILE"
         exit 1
       fi
       
-      echo "✓ Principal certificate updated successfully" | tee -a "$LOG_FILE"
+      echo "✓ Principal certificate updated and deployment restarted successfully" | tee -a "$LOG_FILE"
       echo "Update logs saved to: $LOG_FILE"
     EOT
   }
@@ -713,6 +808,7 @@ resource "null_resource" "hub_pki_principal_server_cert_updated" {
 
 # Issues resource-proxy server certificate for ArgoCD server connectivity
 resource "null_resource" "hub_pki_resource_proxy_cert" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -746,6 +842,7 @@ resource "null_resource" "hub_pki_resource_proxy_cert" {
 
 # Creates JWT signing key for agent authentication tokens
 resource "null_resource" "hub_pki_jwt_signing_key" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -776,6 +873,7 @@ resource "null_resource" "hub_pki_jwt_signing_key" {
 
 # Configures Principal with allowed agent namespaces for authorization
 resource "null_resource" "hub_principal_allowed_namespaces_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -815,6 +913,7 @@ resource "null_resource" "hub_principal_allowed_namespaces_config" {
 # Configures resource-proxy timeout settings for agent architecture
 # Required for API discovery through multi-hop agent connections
 resource "null_resource" "hub_principal_resource_proxy_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -859,6 +958,7 @@ resource "null_resource" "hub_principal_resource_proxy_config" {
 # Patches Principal deployment with resource-proxy environment variables
 # Maps ConfigMap values to environment variables for runtime configuration
 resource "null_resource" "hub_principal_env_vars_config" {
+  count = var.deploy_hub ? 1 : 0
 
 
   provisioner "local-exec" {
@@ -959,7 +1059,7 @@ resource "null_resource" "hub_principal_env_vars_config" {
 
 # Restarts Principal deployment to apply PKI and configuration changes
 resource "null_resource" "hub_principal_restart" {
-
+  count = var.deploy_hub ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -1058,8 +1158,7 @@ resource "null_resource" "spoke_agent_creation" {
   }
 
   depends_on = [
-    null_resource.hub_principal_restart,
-
+    # null_resource.hub_principal_restart (removed to allow running without full hub deploy)
   ]
 
   triggers = {
@@ -1098,11 +1197,19 @@ resource "kubernetes_namespace" "spoke_agent_managed_namespace" {
 # SECTION 1: KEYCLOAK REALM SETUP
 # =============================================================================
 
-resource "keycloak_realm" "argocd" {
-  count   = var.deploy_hub && var.enable_keycloak ? 1 : 0
-  realm   = var.keycloak_realm
-  enabled = true
-}
+# Realm creation skipped as it already exists
+# resource "keycloak_realm" "argocd" {
+#   count   = var.deploy_hub && var.enable_keycloak ? 1 : 0
+#   realm   = var.keycloak_realm
+#   enabled = true
+#
+#   # Prevent 409 Conflict if realm already exists.
+#   # On first deploy with an existing realm, run:
+#   #   terraform import 'module.hub_cluster[0].keycloak_realm.argocd[0]' argocd
+#   lifecycle {
+#     ignore_changes = [realm]
+#   }
+# }
 
 # =============================================================================
 # SECTION 2: KEYCLOAK CLIENT (Client Authentication Flow)
@@ -1110,9 +1217,9 @@ resource "keycloak_realm" "argocd" {
 
 # Main ArgoCD OIDC Client with Client Authentication (Confidential)
 resource "keycloak_openid_client" "argocd" {
-  count = var.enable_keycloak && !var.keycloak_enable_pkce ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak && !var.keycloak_enable_pkce ? 1 : 0
 
-  realm_id                     = keycloak_realm.argocd[0].id
+  realm_id                     = var.keycloak_realm
   client_id                    = var.keycloak_client_id
   name                         = "ArgoCD OIDC Client (Client Authentication)"
   enabled                      = true
@@ -1154,14 +1261,14 @@ resource "keycloak_openid_client" "argocd" {
   pkce_code_challenge_method               = var.keycloak_enable_pkce ? "S256" : null
   exclude_session_state_from_auth_response = false
 
-  depends_on = [keycloak_realm.argocd]
+  # depends_on = [keycloak_realm.argocd]
 }
 
 # PKCE Client (Public Flow, for CLI authentication)
 resource "keycloak_openid_client" "argocd_pkce" {
-  count = var.enable_keycloak && var.keycloak_enable_pkce ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak && var.keycloak_enable_pkce ? 1 : 0
 
-  realm_id                     = keycloak_realm.argocd[0].id
+  realm_id                     = var.keycloak_realm
   client_id                    = var.keycloak_client_id
   name                         = "ArgoCD OIDC Client (PKCE)"
   enabled                      = true
@@ -1198,7 +1305,7 @@ resource "keycloak_openid_client" "argocd_pkce" {
   # PKCE Configuration
   pkce_code_challenge_method = "S256"
 
-  depends_on = [keycloak_realm.argocd]
+  # depends_on = [keycloak_realm.argocd]
 }
 
 # =============================================================================
@@ -1212,7 +1319,7 @@ resource "keycloak_openid_client" "argocd_pkce" {
 # Groups Client Scope - Required for group claim in token
 resource "keycloak_openid_client_scope" "groups" {
   count                  = var.deploy_hub && var.enable_keycloak ? 1 : 0
-  realm_id               = keycloak_realm.argocd[0].id
+  realm_id               = var.keycloak_realm
   name                   = "groups"
   description            = "Group membership claim for ArgoCD authorization"
   include_in_token_scope = true
@@ -1221,9 +1328,9 @@ resource "keycloak_openid_client_scope" "groups" {
 # Group Membership Protocol Mapper
 # Maps Keycloak groups to "groups" claim in token
 resource "keycloak_openid_group_membership_protocol_mapper" "groups_mapper" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
-  realm_id        = keycloak_realm.argocd[0].id
+  realm_id        = var.keycloak_realm
   client_scope_id = keycloak_openid_client_scope.groups[0].id
   name            = "group-membership"
   claim_name      = "groups"
@@ -1235,9 +1342,9 @@ resource "keycloak_openid_group_membership_protocol_mapper" "groups_mapper" {
 # either to the Default or to the Optional Client Scope. If you put it in the Optional 
 # category you will need to make sure that ArgoCD requests the scope in its OIDC configuration."
 resource "keycloak_openid_client_default_scopes" "argocd" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
-  realm_id  = keycloak_realm.argocd[0].id
+  realm_id  = var.keycloak_realm
   client_id = var.keycloak_enable_pkce ? one(keycloak_openid_client.argocd_pkce[*].id) : one(keycloak_openid_client.argocd[*].id)
 
   default_scopes = [
@@ -1259,19 +1366,19 @@ resource "keycloak_openid_client_default_scopes" "argocd" {
 # Create default ArgoCD admin group
 resource "keycloak_group" "argocd_admins" {
   count    = var.deploy_hub && var.enable_keycloak ? 1 : 0
-  realm_id = keycloak_realm.argocd[0].id
+  realm_id = var.keycloak_realm
   name     = "ArgoCDAdmins"
 }
 
 resource "keycloak_group" "argocd_developers" {
   count    = var.deploy_hub && var.enable_keycloak ? 1 : 0
-  realm_id = keycloak_realm.argocd[0].id
+  realm_id = var.keycloak_realm
   name     = "ArgoCDDevelopers"
 }
 
 resource "keycloak_group" "argocd_viewers" {
   count    = var.deploy_hub && var.enable_keycloak ? 1 : 0
-  realm_id = keycloak_realm.argocd[0].id
+  realm_id = var.keycloak_realm
   name     = "ArgoCDViewers"
 }
 
@@ -1289,7 +1396,7 @@ resource "random_password" "keycloak_admin_password" {
 
 resource "keycloak_user" "argocd_admin" {
   count          = var.deploy_hub && var.enable_keycloak && var.create_default_admin_user ? 1 : 0
-  realm_id       = keycloak_realm.argocd[0].id
+  realm_id       = var.keycloak_realm
   username       = var.default_admin_username
   enabled        = true
   email          = var.default_admin_email
@@ -1321,7 +1428,7 @@ resource "null_resource" "set_admin_password" {
       
       # Get admin access token
       echo "→ Authenticating as Keycloak admin..."
-      TOKEN_RESPONSE=$(curl -sSL -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
+      TOKEN_RESPONSE=$(curl -sSL -X POST "$KEYCLOAK_URL/realms/$REALM/protocol/openid-connect/token" \
         -H "Content-Type: application/x-www-form-urlencoded" \
         -d "username=$KEYCLOAK_USER" \
         -d "password=$KEYCLOAK_PASSWORD" \
@@ -1331,7 +1438,7 @@ resource "null_resource" "set_admin_password" {
       if [ $? -ne 0 ]; then
         echo "✗ ERROR: Failed to connect to Keycloak"
         echo "Response: $TOKEN_RESPONSE"
-        echo "Please set password manually: $KEYCLOAK_URL/admin/master/console/#/$REALM/users/$USER_ID"
+        echo "Please set password manually: $KEYCLOAK_URL/admin/$REALM/console/#/users/$USER_ID"
         exit 1
       fi
       
@@ -1341,7 +1448,7 @@ resource "null_resource" "set_admin_password" {
         echo "✗ ERROR: Failed to obtain access token"
         echo "Response: $TOKEN_RESPONSE"
         echo "Please verify Keycloak credentials and set password manually"
-        echo "Keycloak URL: $KEYCLOAK_URL/admin/master/console/#/$REALM/users/$USER_ID"
+        echo "Keycloak URL: $KEYCLOAK_URL/admin/$REALM/console/#/users/$USER_ID"
         exit 1
       fi
       
@@ -1367,7 +1474,7 @@ resource "null_resource" "set_admin_password" {
       else
         echo "✗ ERROR: Failed to set password (HTTP $HTTP_CODE)"
         echo "Response: $BODY"
-        echo "Please set password manually: $KEYCLOAK_URL/admin/master/console/#/$REALM/users/$USER_ID"
+        echo "Please set password manually: $KEYCLOAK_URL/admin/$REALM/console/#/users/$USER_ID"
         exit 1
       fi
     EOT
@@ -1386,7 +1493,7 @@ resource "null_resource" "set_admin_password" {
 # Add admin user to ArgoCDAdmins group
 resource "keycloak_user_groups" "argocd_admin_groups" {
   count    = var.deploy_hub && var.enable_keycloak && var.create_default_admin_user ? 1 : 0
-  realm_id = keycloak_realm.argocd[0].id
+  realm_id = var.keycloak_realm
   user_id  = keycloak_user.argocd_admin[0].id
   group_ids = [
     keycloak_group.argocd_admins[0].id
@@ -1401,7 +1508,7 @@ resource "keycloak_user_groups" "argocd_admin_groups" {
 
 # Patch ArgoCD ConfigMap with OIDC configuration
 resource "null_resource" "hub_keycloak_oidc_config" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -1470,7 +1577,7 @@ resource "null_resource" "hub_keycloak_secret" {
 
 # Patch ArgoCD RBAC ConfigMap with group-to-role mappings
 resource "null_resource" "hub_keycloak_rbac" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -1505,7 +1612,7 @@ EOF
 
 # Disable admin user when Keycloak is enabled (force SSO login only)
 resource "null_resource" "hub_disable_admin_user" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -1528,7 +1635,7 @@ resource "null_resource" "hub_disable_admin_user" {
 
 # Restart ArgoCD server to apply OIDC and RBAC changes
 resource "null_resource" "hub_keycloak_restart_server" {
-  count = var.enable_keycloak ? 1 : 0
+  count = var.deploy_hub && var.enable_keycloak ? 1 : 0
 
   provisioner "local-exec" {
     interpreter = ["/bin/bash", "-c"]
@@ -1558,7 +1665,7 @@ resource "null_resource" "hub_keycloak_restart_server" {
 
 output "keycloak_realm_id" {
   description = "Keycloak realm ID"
-  value       = var.enable_keycloak && var.deploy_hub ? keycloak_realm.argocd[0].id : null
+  value       = var.enable_keycloak && var.deploy_hub ? var.keycloak_realm : null
 }
 
 output "keycloak_client_id_output" {
