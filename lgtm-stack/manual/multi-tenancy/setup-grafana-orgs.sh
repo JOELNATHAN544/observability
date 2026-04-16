@@ -86,15 +86,17 @@ upsert_user() {
 
 add_user_to_org() {
   local org_id="$1" login="$2" role="$3"
-  # Grafana returns 409 if the user is already a member — treat that as success.
-  local body
-  body="$(api POST "/api/orgs/${org_id}/users" \
-    --data "$(printf '{"loginOrEmail":"%s","role":"%s"}' "${login}" "${role}")" || true)"
-  if echo "${body}" | grep -q "already added"; then
-    # Update the role just in case.
-    api PATCH "/api/orgs/${org_id}/users/$(api GET "/api/users/lookup?loginOrEmail=${login}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')" \
-      --data "$(printf '{"role":"%s"}' "${role}")" >/dev/null || true
-  fi
+  # POST adds the user on the first run; on re-runs Grafana responds with
+  # "User is already member of this organization". Either way, follow up
+  # with a PATCH so the role lands exactly as requested — this makes the
+  # script fully idempotent for role changes.
+  api POST "/api/orgs/${org_id}/users" \
+    --data "$(printf '{"loginOrEmail":"%s","role":"%s"}' "${login}" "${role}")" \
+    >/dev/null || true
+  local user_id
+  user_id="$(api GET "/api/users/lookup?loginOrEmail=${login}" | python3 -c 'import json,sys;print(json.load(sys.stdin)["id"])')"
+  api PATCH "/api/orgs/${org_id}/users/${user_id}" \
+    --data "$(printf '{"role":"%s"}' "${role}")" >/dev/null || true
 }
 
 remove_user_from_default_org() {
@@ -160,7 +162,11 @@ for entry in "${TENANTS[@]}"; do
   user_id="$(upsert_user "${user_login}" "${user_pw}")"
   echo "    user: ${user_login} (id=${user_id})"
 
-  add_user_to_org "${org_id}" "${user_login}" "Viewer"
+  # Editor role is used so the tenant user can actually open Explore and
+  # run ad-hoc queries. Viewer is not enough in Grafana OSS: Viewer users
+  # do not see the Explore sidebar entry. Org boundary — not role — is
+  # what enforces tenant isolation here.
+  add_user_to_org "${org_id}" "${user_login}" "Editor"
   remove_user_from_default_org "${user_login}"
 done
 
