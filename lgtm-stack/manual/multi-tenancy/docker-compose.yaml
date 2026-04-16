@@ -1,0 +1,63 @@
+# Minimal LGTM stack with the multi-tenancy feature enabled.
+#
+# Only Loki + Grafana are needed to demonstrate tenant isolation through the
+# `X-Scope-OrgID` header and Grafana Organizations. Run with:
+#
+#     cp .env.example .env         # local-only demo credentials
+#     docker compose up -d
+#
+# See README.md in this directory for the full walk-through.
+
+networks:
+  lgtm-mt:
+    driver: bridge
+
+volumes:
+  loki_data: {}
+  grafana_data: {}
+
+services:
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: lgtm-mt-loki
+    user: "0:0"
+    restart: unless-stopped
+    ports:
+      - "3100:3100"
+    command: -config.file=/etc/loki/local-config.yaml
+    volumes:
+      - ./loki-config.yaml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    networks:
+      - lgtm-mt
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3100/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: lgtm-mt-grafana
+    user: "0:0"
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_AUTH_ANONYMOUS_ENABLED=false
+      - GF_LOG_LEVEL=info
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks:
+      - lgtm-mt
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
